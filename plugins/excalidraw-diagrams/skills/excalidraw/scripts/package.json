@@ -1,0 +1,10 @@
+{
+  "name": "excalidraw-scripts",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@dagrejs/dagre": "^1.1.4",
+    "sharp": "^0.33.2"
+  }
+}

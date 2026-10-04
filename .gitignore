@@ -1,0 +1,18 @@
+# Local environments and credentials
+.env
+.env.*
+!.env.example
+!.env.sample
+
+# Dependencies and runtime output
+node_modules/
+__pycache__/
+*.pyc
+*.log
+
+# Local editor and OS files
+.DS_Store
+.idea/
+.vscode/
+
+# Keep tool assets trackable; write generated diagrams outside this checkout.
