@@ -9,7 +9,7 @@ A personal toolkit of agent skills, plugins, and workflows.
 | 类型 | 工具 | 状态 | 用途 |
 | --- | --- | --- | --- |
 | Skill | [init-harness](skills/init-harness/SKILL.md) | 首版，待真实项目试用 | 复用项目已有规则与检查入口，建立最小可用的开发、验证和交付闭环 |
-| Plugin | Excalidraw diagrams | [待收录](plugins/README.md) | 生成、展示和导出架构图；尚未提交插件代码 |
+| Plugin | [Excalidraw diagrams](plugins/excalidraw-diagrams/README.md) | 已收录二创包，客户端/MCP 待验证 | 生成、展示和导出架构图；上游许可尚未核实 |
 
 ## 目录
 
@@ -21,7 +21,8 @@ agent-kit/
 │   └── init-harness/
 │       └── SKILL.md
 └── plugins/
-    └── README.md
+    ├── README.md
+    └── excalidraw-diagrams/
 ```
 
 - `skills/<name>/SKILL.md` 是独立技能入口。有实际内容时再添加 `references/`、`scripts/` 或 `assets/`。
@@ -44,7 +45,7 @@ git clone https://github.com/hua-bang/agent-kit.git
 
 ### Plugins
 
-插件收录后，按插件自己的 README 安装。当前尚无可安装的插件，见 [收录状态](plugins/README.md)。
+按插件自己的 README 使用，见 [收录状态](plugins/README.md)。Excalidraw 已收录用户提供的二创包；客户端安装及远端 MCP 尚未验证。
 
 ## 修改与验证
 
@@ -60,4 +61,4 @@ git diff --check
 
 ## 来源与许可
 
-第三方工具收录前必须明确来源和再分发许可，并保留原许可证及署名。当前未选择仓库级开源许可证；公开可见不等于授予再分发许可，也不能替代未来收录工具各自的许可证。
+第三方工具原则上应先明确来源和再分发许可，并保留原许可证及署名。Excalidraw 按用户明确要求先收录二创包，其上游许可尚未核实，详见 [来源与许可状态](plugins/excalidraw-diagrams/PROVENANCE.md)。当前未选择仓库级开源许可证；公开可见不等于授予再分发许可，也不能替代未来收录工具各自的许可证。
