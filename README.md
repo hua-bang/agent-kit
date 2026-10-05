@@ -9,6 +9,7 @@ A personal toolkit of agent skills, plugins, and workflows.
 | 类型 | 工具 | 状态 | 用途 |
 | --- | --- | --- | --- |
 | Skill | [init-harness](skills/init-harness/SKILL.md) | 首版，待真实项目试用 | 复用项目已有规则与检查入口，建立最小可用的开发、验证和交付闭环 |
+| Plugin | [Local Excalidraw MCP App](plugins/excalidraw/README.md) | Agent Plugins 包；预构建版发布在 `release` 分支（`codex plugin marketplace add hua-bang/agent-kit --ref release`），桌面 UI 待验收 | 本地持久化图纸，用户与 Agent 共同编辑 |
 | Plugin | [Excalidraw diagrams](plugins/excalidraw-diagrams/README.md) | 已收录二创包，客户端/MCP 待验证 | 生成、展示和导出架构图；上游许可尚未核实 |
 
 ## 目录
@@ -22,6 +23,7 @@ agent-kit/
 │       └── SKILL.md
 └── plugins/
     ├── README.md
+    ├── excalidraw/
     └── excalidraw-diagrams/
 ```
 
@@ -61,4 +63,4 @@ git diff --check
 
 ## 来源与许可
 
-第三方工具原则上应先明确来源和再分发许可，并保留原许可证及署名。Excalidraw 按用户明确要求先收录二创包，其上游许可尚未核实，详见 [来源与许可状态](plugins/excalidraw-diagrams/PROVENANCE.md)。当前未选择仓库级开源许可证；公开可见不等于授予再分发许可，也不能替代未来收录工具各自的许可证。
+第三方工具原则上应先明确来源和再分发许可，并保留原许可证及署名。Excalidraw 按用户明确要求先收录二创包，其上游许可尚未核实，详见 [来源与许可状态](plugins/excalidraw-diagrams/PROVENANCE.md)。本仓库自有内容采用 [MIT 许可证](LICENSE)。它不覆盖第三方内容：`plugins/excalidraw-diagrams/` 的上游许可仍未核实，不因本仓库许可证而获得再分发授权；打包进 `plugins/excalidraw` 构建产物的依赖与字体保留各自许可证（见其 [PROVENANCE](plugins/excalidraw/PROVENANCE.md)）。

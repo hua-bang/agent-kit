@@ -1,0 +1,7 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "excalidraw",
+  "version": "0.1.0",
+  "description": "Local-first Excalidraw drawings with a bundled skill, stdio MCP server and interactive MCP App. Install the prebuilt `release` branch, or build from source before installing.",
+  "keywords": ["excalidraw", "diagram", "local-first", "mcp-app"]
+}

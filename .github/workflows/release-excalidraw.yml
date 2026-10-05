@@ -1,0 +1,59 @@
+# Build the Excalidraw plugin and publish a prebuilt copy of the repository to the
+# `release` branch, so users can install it with:
+#   codex plugin marketplace add hua-bang/agent-kit --ref release
+# The default branch stays source-only; `release` is regenerated (force-pushed) on each run.
+name: Release Excalidraw plugin
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - plugins/excalidraw/**
+      - .agents/plugins/marketplace.json
+      - .github/workflows/release-excalidraw.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-excalidraw
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: plugins/excalidraw
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: plugins/excalidraw/package-lock.json
+
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      - run: npm run test:stdio
+
+      - name: Check the release layout runs without node_modules
+        run: |
+          out="$(mktemp -d)"
+          cp -R plugin.json mcp.json package.json skills scripts dist licenses "$out"/
+          node scripts/plugin-smoke.mjs "$out"
+
+      - name: Publish to the release branch
+        working-directory: .
+        run: |
+          version="$(node -p "require('./plugins/excalidraw/package.json').version")"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -B release
+          git add -f plugins/excalidraw/dist
+          git commit -m "release: excalidraw ${version} from ${GITHUB_SHA::7}"
+          git push --force origin release
