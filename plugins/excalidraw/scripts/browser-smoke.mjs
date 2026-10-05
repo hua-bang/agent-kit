@@ -101,6 +101,7 @@ try {
   await frame.getByLabel('图纸名称', { exact: true }).fill('独立副本');
   await frame.getByRole('button', { name: '图纸列表', exact: true }).click();
   await frame.getByRole('button', { name: /独立副本/ }).waitFor();
+  assert.equal(await frame.getByText('已打开独立副本，原图保持不变。').count(), 0, 'Copy notice does not linger on the list');
   await frame.getByLabel('搜索图纸').fill('不存在的图纸');
   await frame.getByText('没有匹配的图纸。').waitFor();
   await frame.getByRole('button', { name: '清除搜索' }).click();

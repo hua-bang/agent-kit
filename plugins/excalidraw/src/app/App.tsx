@@ -162,6 +162,7 @@ export function App() {
     await save();
     if (dirty.current || saving.current) throw new Error('请先保存修改，或导出草稿后重新载入。');
     api.current = null;
+    setNotice(''); // Notices describe the editor session; do not carry them back to the list.
     if (isLibrary) {
       current.current = null; setDoc(null); setLibrary(null); await refreshLibrary();
     } else {
