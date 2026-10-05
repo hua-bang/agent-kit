@@ -21,10 +21,11 @@ Values mirror Excalidraw 0.18's CSS variables. Tokens live on `:root` and are re
 
 ## 3. Typography
 
-System stack with PingFang SC / YaHei fallback, no added web fonts (Excalifont only covers Latin, so it is not used for mostly-Chinese titles). 14px body and buttons, 16px/600 library heading and card title, 13px editor actions, 12px metadata and status. Library titles clamp to two lines; card and editor titles wrap rather than truncate.
+System stack with PingFang SC / YaHei fallback, no added web fonts (Excalifont only covers Latin, so it is not used for mostly-Chinese titles). 14px body and buttons, 16px/600 library heading and card title, 13px save button, 12px metadata and status. Library titles clamp to two lines; card and editor titles wrap rather than truncate.
 
 ## 4. Components
 
+- Editor header: only back, title and save state. Autosave runs every 1.2s, so the `保存` button appears only while changes are unsaved or saving is paused. Export, copy (library only) and reload live in Excalidraw's own main menu (☰) above its default clear/background items, matching where Excalidraw keeps its export.
 - Buttons: 8px radius, 36px high (32px in the editor bar). `tool` buttons use Excalidraw's gray fill and get a primary border while pressed; the primary button is violet with bold text; `ghost` is only for "back". Icons appear only on back, search, refresh and create; they are local inline SVG with `aria-hidden`, and the icon-only refresh button carries an `aria-label`.
 - Inputs: 36px, 1px `--line` border on the island colour; focus shows a 1px primary border plus a 1px primary ring.
 - Count: a violet-tinted badge beside the library heading; while searching it reads `matches / total`.
@@ -51,7 +52,7 @@ Use real Excalidraw rendering and editing, never a mock canvas. Do not introduce
 
 ## 8. Responsive and motion
 
-At 640px and below, the library toolbar stacks search above create. At 560px and below, editor actions move to their own row under back/title/status; the library grid becomes two columns; the card's expand button spans the full width; preview height becomes 240px (320px normally) and editor height 520px (600px normally). 150ms colour transitions and the pending pulse are disabled under reduced motion. Excalidraw's native compact toolbar is retained. The app fills the frame height: `html`/`body`/`#root` are 100% and the editor, card preview and library grow into spare space. The App SDK measures `<html>` at `max-content`, so the reported auto-resize height stays the natural one (600px editor, 320px preview). When the host context reports a fixed `containerDimensions.height` or fullscreen mode, `data-fill` is set on `<html>` and the editor shrinks to fit (minimum 320px) instead of overflowing. Browser regression checks 375px layout and long Chinese/English names. Actual Codex Sidebar sizing remains a host acceptance task.
+At 640px and below, the library toolbar stacks search above create. At 560px and below, the library grid becomes two columns; the card's expand button spans the full width; preview height becomes 240px (320px normally) and editor height 520px (600px normally). 150ms colour transitions and the pending pulse are disabled under reduced motion. Excalidraw's native compact toolbar is retained. The app fills the frame height: `html`/`body`/`#root` are 100% and the editor, card preview and library grow into spare space. The App SDK measures `<html>` at `max-content`, so the reported auto-resize height stays the natural one (600px editor, 320px preview). When the host context reports a fixed `containerDimensions.height` or fullscreen mode, `data-fill` is set on `<html>` and the editor shrinks to fit (minimum 320px) instead of overflowing. Browser regression checks 375px layout and long Chinese/English names. Actual Codex Sidebar sizing remains a host acceptance task.
 
 ## 9. Follow-up implementation prompts
 

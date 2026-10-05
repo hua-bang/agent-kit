@@ -121,8 +121,7 @@ html, body, #root { height: 100%; }
 .back { padding: 0 10px 0 6px; flex-shrink: 0; }
 .title { flex: 1; min-width: 120px; padding: 0 8px; border-color: transparent; background: transparent; font-weight: 600; }
 @media (hover: hover) { .title:hover { background: var(--button); } }
-.editor-actions { display: flex; align-items: center; gap: 4px; }
-.editor-actions button { height: 32px; padding: 0 12px; font-size: 13px; }
+.save { height: 32px; padding: 0 12px; font-size: 13px; }
 .app > .editor { flex: 1 0 auto; height: 600px; min-height: 400px; }
 /* Host-fixed frame (sidebar, fullscreen): fit the editor inside it instead. */
 [data-fill] .app > .editor { flex: 1 1 0; height: auto; min-height: 320px; }
@@ -176,8 +175,6 @@ html, body, #root { height: 100%; }
 }
 @media (max-width: 560px) {
   .title { min-width: 0; }
-  .editor-actions { flex-basis: 100%; order: 3; flex-wrap: wrap; }
-  .editor-actions button { padding: 0 10px; }
   .app > .editor { height: 520px; }
   [data-fill] .app > .editor { height: auto; }
   .preview-open { height: 240px; }

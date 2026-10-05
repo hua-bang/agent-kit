@@ -40,6 +40,11 @@ try {
   page.on('request', req => { if (/^https?:/.test(req.url()) && !req.url().startsWith('http://127.0.0.1:')) external.push(req.url()); });
   await page.goto(`http://127.0.0.1:${http.address().port}`);
   const frame = page.frameLocator('iframe');
+  // Drawing actions live in Excalidraw's main menu, not the header.
+  const menuItem = async name => {
+    await frame.locator('[data-testid="main-menu-trigger"]').click();
+    return frame.getByRole('button', { name, exact: true });
+  };
   await frame.getByText('从一张空白图纸开始').waitFor();
   await frame.getByLabel('新图纸名称').fill('浏览器实际编辑验证');
   await frame.getByRole('button', { name: '新建图纸', exact: true }).click();
@@ -93,7 +98,8 @@ try {
   await frame.getByRole('button', { name: /浏览器实际编辑验证/ }).click();
   await frame.getByLabel('图纸名称', { exact: true }).waitFor({ timeout: 12000 }).catch(async e => { console.error(await frame.locator('body').innerText()); throw e; });
   // Library copy creates independent identity and keeps the original untouched.
-  await frame.getByRole('button', { name: '复制为新图', exact: true }).click();
+  assert.equal(await frame.getByRole('button', { name: '保存', exact: true }).count(), 0, 'Save button hidden while autosaved');
+  await (await menuItem('复制为新图')).click();
   await frame.getByText('已打开独立副本，原图保持不变。').waitFor();
   const copies = (await client.callTool({ name: 'list_drawings', arguments: {} })).structuredContent.drawings;
   assert.equal(copies.length, 2);
@@ -161,10 +167,10 @@ try {
   await frame.getByRole('button', { name: '返回预览', exact: true }).click();
   assert.equal(await frame.getByLabel('图纸名称', { exact: true }).inputValue(), '尚未保存的冲突草稿');
   const downloadWait = page.waitForEvent('download');
-  await frame.getByRole('button', { name: '导出', exact: true }).click();
+  await (await menuItem('导出')).click();
   assert.ok((await downloadWait).suggestedFilename().endsWith('.excalidraw'));
   page.once('dialog', dialog => dialog.accept());
-  await frame.getByRole('button', { name: '重新载入', exact: true }).click();
+  await (await menuItem('重新载入')).click();
   await page.waitForTimeout(500);
   await frame.getByRole('button', { name: '返回预览', exact: true }).click();
   await frame.getByRole('button', { name: '展开编辑', exact: true }).waitFor();

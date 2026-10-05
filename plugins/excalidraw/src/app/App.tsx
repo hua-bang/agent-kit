@@ -4,7 +4,7 @@ import { applyDocumentTheme, type McpUiTheme } from '@modelcontextprotocol/ext-a
 import type { ExcalidrawImperativeAPI } from '@excalidraw/excalidraw/types';
 import { bridge, callTool } from './bridge';
 import { Preview } from './Preview';
-import { IconBack, IconCanvas, IconPlus, IconRefresh, IconSearch } from './icons';
+import { IconBack, IconCanvas, IconCopy, IconDownload, IconPlus, IconRefresh, IconSearch } from './icons';
 import { documentSchema, sceneSchema, sceneOf, type Drawing, type DrawingSummary, type Scene } from '../shared/schemas';
 
 type Library = { drawings: DrawingSummary[]; warnings: string[] };
@@ -188,22 +188,8 @@ export function App() {
         <button className="ghost back" disabled={busy} onClick={() => void action(leaveEditor)}><IconBack />{isLibrary ? '图纸列表' : '返回预览'}</button>
         <input ref={titleInput} aria-label="图纸名称" className="title" value={title} maxLength={160} onChange={e => { setTitle(e.target.value); changed(); }} />
         {statusPill}
-        <div className="editor-actions" role="group" aria-label="图纸操作">
-          <button className="tool" disabled={busy} onClick={() => { conflict.current = false; void save(); }}>保存</button>
-          <button className="tool" onClick={download}>导出</button>
-          {isLibrary && <button className="tool" disabled={busy} onClick={() => void action(async () => {
-            await save();
-            if (dirty.current || saving.current) throw new Error('请先保存修改，再复制图纸。');
-            const source = current.current!;
-            load((await callTool<{ document: Drawing }>('create_drawing', { title: source.plugin.title.slice(0, 155) + ' 副本', scene: sceneOf(source) })).document);
-            setNotice('已打开独立副本，原图保持不变。');
-          })}>复制为新图</button>}
-          <button className="tool" disabled={busy} onClick={() => void action(async () => {
-            if (saving.current) throw new Error('请等待保存结束');
-            if (dirty.current && !window.confirm('放弃尚未保存的修改，重新载入本地图纸？建议先导出草稿。')) return;
-            load((await callTool<{ document: Drawing }>('read_drawing', { id: current.current!.plugin.id })).document);
-          })}>重新载入</button>
-        </div>
+        {/* Autosave covers the normal case; the button only appears while work is unsaved or paused. */}
+        {(tone === 'pending' || tone === 'error') && <button className="tool save" disabled={busy} onClick={() => { conflict.current = false; void save(); }}>保存</button>}
       </header>
       {messages}
       <section id="main-content" className="editor" aria-label="Excalidraw 编辑器">
@@ -221,7 +207,24 @@ export function App() {
             }
           } catch (e) { conflict.current = true; setError(`无法自动保存此场景，请导出草稿：${String(e)}`); }
         }}>
-        <MainMenu><MainMenu.DefaultItems.ClearCanvas /><MainMenu.DefaultItems.ChangeCanvasBackground /></MainMenu>
+        <MainMenu>
+          <MainMenu.Item icon={<IconDownload />} onSelect={download}>导出</MainMenu.Item>
+          {isLibrary && <MainMenu.Item icon={<IconCopy />} disabled={busy} onSelect={() => void action(async () => {
+            await save();
+            if (dirty.current || saving.current) throw new Error('请先保存修改，再复制图纸。');
+            const source = current.current!;
+            load((await callTool<{ document: Drawing }>('create_drawing', { title: source.plugin.title.slice(0, 155) + ' 副本', scene: sceneOf(source) })).document);
+            setNotice('已打开独立副本，原图保持不变。');
+          })}>复制为新图</MainMenu.Item>}
+          <MainMenu.Item icon={<IconRefresh />} disabled={busy} onSelect={() => void action(async () => {
+            if (saving.current) throw new Error('请等待保存结束');
+            if (dirty.current && !window.confirm('放弃尚未保存的修改，重新载入本地图纸？建议先导出草稿。')) return;
+            load((await callTool<{ document: Drawing }>('read_drawing', { id: current.current!.plugin.id })).document);
+          })}>重新载入</MainMenu.Item>
+          <MainMenu.Separator />
+          <MainMenu.DefaultItems.ClearCanvas />
+          <MainMenu.DefaultItems.ChangeCanvasBackground />
+        </MainMenu>
       </Excalidraw>
       </section>
     </> : doc ? <>
