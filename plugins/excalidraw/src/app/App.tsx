@@ -4,7 +4,7 @@ import { applyDocumentTheme, type McpUiTheme } from '@modelcontextprotocol/ext-a
 import type { ExcalidrawImperativeAPI } from '@excalidraw/excalidraw/types';
 import { bridge, callTool } from './bridge';
 import { Preview } from './Preview';
-import { IconBack, IconCanvas, IconCopy, IconDownload, IconLock, IconPencil, IconPlus, IconRefresh, IconSave, IconSearch } from './icons';
+import { IconBack, IconCanvas, IconPlus, IconRefresh, IconSearch } from './icons';
 import { documentSchema, sceneSchema, sceneOf, type Drawing, type DrawingSummary, type Scene } from '../shared/schemas';
 
 type Library = { drawings: DrawingSummary[]; warnings: string[] };
@@ -177,7 +177,7 @@ export function App() {
   const tone = /暂停|未连接|失败/.test(status) ? 'error' : /正在保存|未保存/.test(status) ? 'pending' : /已保存/.test(status) ? 'ok' : 'idle';
   const statusPill = <span className={`status tone-${tone}`} role="status" aria-live="polite"><i aria-hidden="true" />{status}</span>;
   const messages = <>
-    {error && <div className="banner error" role="alert"><span>{error}</span>{!doc && connected && isLibrary && <button className="ghost" onClick={() => void refreshLibrary()}>重试</button>}</div>}
+    {error && <div className="banner error" role="alert"><span>{error}</span>{!doc && connected && isLibrary && <button className="tool" onClick={() => void refreshLibrary()}>重试</button>}</div>}
     {notice && <div className="banner notice" role="status">{notice}</div>}
   </>;
   return <main className={`app ${isLibrary ? 'library-surface' : 'drawing-surface'} ${doc && editing ? 'is-editing' : ''}`}>
@@ -188,20 +188,20 @@ export function App() {
         <input ref={titleInput} aria-label="图纸名称" className="title" value={title} maxLength={160} onChange={e => { setTitle(e.target.value); changed(); }} />
         {statusPill}
         <div className="editor-actions" role="group" aria-label="图纸操作">
-          <button className="ghost" disabled={busy} onClick={() => { conflict.current = false; void save(); }}><IconSave />保存</button>
-          <button className="ghost" onClick={download}><IconDownload />导出</button>
-          {isLibrary && <button className="ghost" disabled={busy} onClick={() => void action(async () => {
+          <button className="tool" disabled={busy} onClick={() => { conflict.current = false; void save(); }}>保存</button>
+          <button className="tool" onClick={download}>导出</button>
+          {isLibrary && <button className="tool" disabled={busy} onClick={() => void action(async () => {
             await save();
             if (dirty.current || saving.current) throw new Error('请先保存修改，再复制图纸。');
             const source = current.current!;
             load((await callTool<{ document: Drawing }>('create_drawing', { title: source.plugin.title.slice(0, 155) + ' 副本', scene: sceneOf(source) })).document);
             setNotice('已打开独立副本，原图保持不变。');
-          })}><IconCopy />复制为新图</button>}
-          <button className="ghost" disabled={busy} onClick={() => void action(async () => {
+          })}>复制为新图</button>}
+          <button className="tool" disabled={busy} onClick={() => void action(async () => {
             if (saving.current) throw new Error('请等待保存结束');
             if (dirty.current && !window.confirm('放弃尚未保存的修改，重新载入本地图纸？建议先导出草稿。')) return;
             load((await callTool<{ document: Drawing }>('read_drawing', { id: current.current!.plugin.id })).document);
-          })}><IconRefresh />重新载入</button>
+          })}>重新载入</button>
         </div>
       </header>
       {messages}
@@ -228,29 +228,26 @@ export function App() {
       <section id="main-content" className="card" aria-label="图纸预览">
         <button className="preview-open" onClick={expand} aria-label={`展开编辑 ${doc.plugin.title}`}>
           <Preview document={doc} dark={theme === 'dark'} />
-          <span className="preview-hint" aria-hidden="true"><IconPencil />点击编辑</span>
         </button>
         <div className="card-bar">
           <div className="heading">
             <h1>{doc.plugin.title}</h1>
-            <span className="meta">更新于 {relativeTime(doc.plugin.updatedAt)}<span className="sep">·</span><span className="mono">r{doc.plugin.revision}</span></span>
+            <span className="meta">更新于 {relativeTime(doc.plugin.updatedAt)}</span>
           </div>
-          <button ref={expandButton} className="primary" onClick={expand}><IconPencil />展开编辑</button>
+          <button ref={expandButton} className="primary" onClick={expand}>展开编辑</button>
         </div>
       </section>
     </> : isLibrary ? <>
       <header className="library-head">
-        <div className="heading">
-          <h1>图纸库</h1>
-          <span className="meta"><IconLock />{library ? `${library.drawings.length} 张图纸 · 仅保存在本机` : '仅保存在本机'}</span>
-        </div>
-        <button className="icon-button" aria-label="刷新" title="刷新" disabled={!connected || busy || refreshing} onClick={() => void refreshLibrary()}><IconRefresh className={refreshing ? 'spin' : ''} /></button>
+        <h1>图纸库</h1>
+        {library && <span className="count">{query ? `${matches.length} / ${library.drawings.length}` : library.drawings.length}</span>}
+        <button className="tool icon-button" aria-label="刷新" title="刷新" disabled={!connected || busy || refreshing} onClick={() => void refreshLibrary()}><IconRefresh className={refreshing ? 'spin' : ''} /></button>
       </header>
       {messages}
       <section id="main-content" className="library" aria-label="图纸库">
         <div className="toolbar">
           <label className="search"><IconSearch />
-            <input type="search" aria-label="搜索图纸" placeholder="搜索图纸…" value={query} onChange={e => { setQuery(e.target.value); setLimit(20); }} />
+            <input type="search" aria-label="搜索图纸" placeholder="搜索" value={query} onChange={e => { setQuery(e.target.value); setLimit(20); }} />
           </label>
           <div className="composer" role="group" aria-label="新建图纸">
             <input aria-label="新图纸名称" placeholder="新图纸名称" value={newTitle} maxLength={160} onChange={e => setNewTitle(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) e.currentTarget.parentElement?.querySelector('button')?.click(); }} />
@@ -260,17 +257,16 @@ export function App() {
             })}><IconPlus />新建图纸</button>
           </div>
         </div>
-        <div className="list-caption"><span>{query ? '搜索结果' : '最近修改'}</span><span>{library ? `${matches.length} 张` : '读取中'}</span></div>
         {!library ? <p className="empty-state" role="status">{error ? '无法读取图纸，请重试。' : connected ? '读取本地图纸中' : '等待 MCP 宿主连接'}</p> : <>
           {library.warnings.length > 0 && <p className="banner error inline" role="alert">{library.warnings.length} 个图纸文件无法读取，原文件未修改。</p>}
           <div className="drawing-grid" aria-busy={refreshing}>
             {matches.slice(0, limit).map(d => <button className="drawing" key={d.id} disabled={busy || refreshing} onClick={() => void action(async () => {
               load((await callTool<{ document: Drawing }>('read_drawing', { id: d.id })).document); setNotice('');
-            })}><Preview summary={d} dark={theme === 'dark'} /><span className="drawing-info"><strong>{d.title}</strong><span className="meta">{relativeTime(d.updatedAt)}<span className="sep">·</span><span className="mono">r{d.revision}</span></span></span></button>)}
+            })}><Preview summary={d} dark={theme === 'dark'} /><span className="drawing-info"><strong>{d.title}</strong><span className="meta">{relativeTime(d.updatedAt)}</span></span></button>)}
           </div>
-          {matches.length > limit && <button className="ghost more" onClick={() => setLimit(value => value + 20)}>显示更多图纸</button>}
+          {matches.length > limit && <button className="tool more" onClick={() => setLimit(value => value + 20)}>显示更多图纸</button>}
           {!library.drawings.length && <div className="empty-state"><span className="empty-icon"><IconCanvas /></span><strong>从一张空白图纸开始</strong><p>新建图纸，或让 Agent 帮你画。</p></div>}
-          {!!library.drawings.length && !matches.length && <div className="empty-state"><span className="empty-icon"><IconSearch /></span><p>没有匹配的图纸。</p><button className="ghost" onClick={() => setQuery('')}>清除搜索</button></div>}
+          {!!library.drawings.length && !matches.length && <div className="empty-state"><p>没有匹配的图纸。</p><button className="tool" onClick={() => setQuery('')}>清除搜索</button></div>}
         </>}
       </section>
     </> : <section id="main-content" className="card waiting" role="status">
