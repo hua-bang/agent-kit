@@ -1,0 +1,76 @@
+import { readFile } from 'node:fs/promises';
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { registerAppResource, registerAppTool, RESOURCE_MIME_TYPE } from '@modelcontextprotocol/ext-apps/server';
+import { z } from 'zod';
+import { DrawingStore, ConflictError } from '../storage/drawings.js';
+import { idSchema, titleSchema, sceneSchema, elementSchema, type Drawing } from '../shared/schemas.js';
+
+export const UI_URI = 'ui://excalidraw/editor.html';
+export const LIBRARY_URI = 'ui://excalidraw/library.html';
+export function createServer(store = new DrawingStore(), htmlPath = new URL('../ui/index.html', import.meta.url)) {
+  const server = new McpServer({ name: 'local-excalidraw', version: '0.1.0' });
+  const ui = { resourceUri: UI_URI };
+  const readonly = { readOnlyHint: true, openWorldHint: false };
+  const writable = { readOnlyHint: false, destructiveHint: false, openWorldHint: false };
+  const result = (data: Record<string, unknown>) => ({
+    content: [{ type: 'text' as const, text: JSON.stringify('document' in data
+      ? { document: (data.document as Drawing).plugin } : data) }], structuredContent: data,
+  });
+  const guarded = async (fn: () => Promise<Record<string, unknown>>) => {
+    try { return result(await fn()); }
+    catch (error) {
+      const message = error instanceof z.ZodError ? 'Invalid drawing data: ' + error.issues.map(i => i.message).join('; ')
+        : error instanceof Error && 'code' in error && error.code === 'ENOENT' ? 'Drawing not found'
+        : error instanceof Error ? error.message : 'Operation failed';
+      return { isError: true, content: [{ type: 'text' as const, text: message }],
+        structuredContent: { error: message, ...(error instanceof ConflictError ? { currentRevision: error.currentRevision } : {}) } };
+    }
+  };
+  for (const [uri, surface] of [[UI_URI, 'drawing'], [LIBRARY_URI, 'library']] as const) {
+    registerAppResource(server, `Excalidraw ${surface}`, uri, {}, async () => ({ contents: [{
+      uri, mimeType: RESOURCE_MIME_TYPE,
+      text: (await readFile(htmlPath, 'utf8')).replace('<head>', `<head><meta name="excalidraw-surface" content="${surface}">`),
+      _meta: { ui: { prefersBorder: true, csp: { connectDomains: [], resourceDomains: [] } } },
+    }] }));
+  }
+  registerAppTool(server, 'open_library', {
+    title: 'Excalidraw 图纸库', description: 'Open the dedicated local drawing library, intended for Sidebar. If the host cannot show Sidebar, this explicit library tool can open a library App. Use open_drawing for conversation cards.',
+    inputSchema: {}, annotations: readonly,
+    _meta: { ui: { resourceUri: LIBRARY_URI }, ...(process.env.EXCALIDRAW_ENABLE_SIDEBAR === '1' ? { 'openai/ui': { entrypoints: [{ type: 'global' }] } } : {}) },
+  }, () => guarded(async () => ({ view: 'library', ...await store.list() })));
+  server.registerTool('list_drawings', { description: 'List locally saved drawings without opening a UI.', inputSchema: {}, annotations: readonly },
+    () => guarded(() => store.list()));
+  registerAppTool(server, 'open_drawing', {
+    description: 'Open a specific drawing in the inline Excalidraw MCP App.',
+    inputSchema: { id: idSchema }, _meta: { ui }, annotations: readonly,
+  }, ({ id }) => guarded(async () => ({ document: await store.read(id) })));
+  server.registerTool('read_drawing', {
+    description: 'Read the latest scene and revision before editing. Includes locally embedded image data.',
+    inputSchema: { id: idSchema }, annotations: readonly,
+  }, ({ id }) => guarded(async () => ({ document: await store.read(id) })));
+  registerAppTool(server, 'create_drawing', {
+    description: 'Create a local drawing and show its fixed-ID preview. Expand the preview to edit. Optional scene contains Excalidraw elements; omit for a blank canvas.',
+    inputSchema: { title: titleSchema, scene: sceneSchema.optional() }, annotations: writable, _meta: { ui },
+  }, ({ title, scene }) => guarded(async () => ({ document: await store.create(title, scene) })));
+  server.registerTool('save_drawing', {
+    description: 'Save a complete scene with expectedRevision. Rejects stale writes; no force overwrite. Preserves five backups.',
+    inputSchema: { id: idSchema, expectedRevision: z.number().int().positive(), scene: sceneSchema, title: titleSchema.optional() },
+    annotations: { ...writable, destructiveHint: true },
+  }, ({ id, expectedRevision, scene, title }) => guarded(async () => ({ document: await store.save(id, expectedRevision, scene, title) })));
+  server.registerTool('patch_drawing', {
+    description: 'Read first, then upsert complete Excalidraw elements by ID and/or delete IDs. Untouched elements and files are preserved. For image changes use save_drawing with complete files.',
+    inputSchema: { id: idSchema, expectedRevision: z.number().int().positive(), upsert: z.array(elementSchema).max(20_000).default([]), removeIds: z.array(z.string()).default([]) },
+    annotations: { ...writable, destructiveHint: true },
+  }, ({ id, expectedRevision, upsert, removeIds }) => guarded(async () => {
+    const doc = await store.read(id);
+    if (doc.plugin.revision !== expectedRevision) throw new ConflictError(doc.plugin.revision);
+    const changes = new Map(upsert.map(e => [e.id, e]));
+    const removed = new Set(removeIds);
+    const elements = doc.elements.filter(e => !removed.has(e.id)).map(e => {
+      const next = changes.get(e.id); changes.delete(e.id); return next ?? e;
+    });
+    for (const next of changes.values()) if (!removed.has(next.id)) elements.push(next);
+    return { document: await store.save(id, expectedRevision, { elements, appState: doc.appState, files: doc.files }) };
+  }));
+  return server;
+}
