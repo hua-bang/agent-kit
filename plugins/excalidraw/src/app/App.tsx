@@ -65,11 +65,15 @@ export function App() {
       try { if (!result.isError && result.structuredContent) handlers.current.receive(result.structuredContent); }
       catch (e) { setError(String(e)); }
     };
-    bridge.onhostcontextchanged = context => { if (context.theme) setTheme(context.theme); };
+    bridge.onhostcontextchanged = context => {
+      if (context.theme) setTheme(context.theme);
+      if (context.containerDimensions || context.displayMode) applyFill();
+    };
     bridge.connect().then(() => {
       if (!mounted.current) return;
       const hostTheme = bridge.getHostContext()?.theme;
       if (hostTheme) setTheme(hostTheme);
+      applyFill();
       setConnected(true); setStatus('已连接');
       // A tool result may arrive with the handshake. Do not replace its document.
       if (isLibrary) void refreshLibrary();
@@ -274,6 +278,13 @@ export function App() {
       <span>{connected ? '等待图纸，请让 Agent 打开或新建一张图。' : '连接 MCP 宿主中'}</span>
     </section>}
   </main>;
+}
+
+/** A host-fixed height (sidebar, fullscreen) means the editor should fit it, not grow past it. */
+function applyFill() {
+  const context = bridge.getHostContext();
+  const fixed = !!context?.containerDimensions && 'height' in context.containerDimensions || context?.displayMode === 'fullscreen';
+  document.documentElement.toggleAttribute('data-fill', fixed);
 }
 
 const relativeFormat = new Intl.RelativeTimeFormat('zh-CN', { numeric: 'auto' });
