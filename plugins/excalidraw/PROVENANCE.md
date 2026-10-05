@@ -25,6 +25,6 @@ The `release` branch carries a built `dist/`, published by `.github/workflows/re
 - **Fonts**: only Assistant, Virgil, Lilita One, Nunito (OFL 1.1) and Comic Shanns (MIT) are shipped, with evidence read from each font file in [licenses/FONTS.md](licenses/FONTS.md). Excalifont, Cascadia Code and Liberation Sans could not be verified and are replaced at build time by a cleared family; Xiaolai is replaced for size. The transform fails the build if any other family would be inlined.
 - The Excalidraw MIT license is in [licenses/excalidraw-MIT.txt](licenses/excalidraw-MIT.txt); it does not substitute for the notices above.
 
-The repository itself still has no blanket license; that decision belongs to the owner and is independent of these third-party notices.
+This repository's own code is MIT licensed ([LICENSE](../../LICENSE)). That license covers the plugin's own source only; bundled packages and fonts keep the licenses listed above.
 
-The default branch commits no built assets, dependency directories, user diagrams, screenshots, or host configuration; only the generated `release` branch adds `dist/`. The new package is marked `private: true`; the repository has no blanket open-source license.
+The default branch commits no built assets, dependency directories, user diagrams, screenshots, or host configuration; only the generated `release` branch adds `dist/`. The package is marked `private: true` and is not published to npm.

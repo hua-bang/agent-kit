@@ -70,7 +70,7 @@ codex plugin add excalidraw@agent-kit-local
 
 已在临时 `CODEX_HOME` 实测 marketplace 注册和 `codex plugin add`，并从安装缓存验证 skill、stdio 工具读写和 UI 资源。**尚未验证真实桌面对话的 skill 自动触发和画板渲染**，也未修改用户的正式 Codex 配置。CLI 不能显示交互画板。
 
-参考：[Agent Plugins 参考包](../excalidraw-diagrams/README.md)、[OpenAI 插件打包文档](https://developers.openai.com/plugins/build/plugins)。第三方与字体再分发依据见 [PROVENANCE.md](PROVENANCE.md)；仓库本身尚未选择许可证。
+参考：[Agent Plugins 参考包](../excalidraw-diagrams/README.md)、[OpenAI 插件打包文档](https://developers.openai.com/plugins/build/plugins)。第三方与字体再分发依据见 [PROVENANCE.md](PROVENANCE.md)；本插件自有代码随仓库采用 [MIT](../../LICENSE)。
 
 ## 安装与构建
 
@@ -174,9 +174,9 @@ npm run test:browser
 
 ## 安全与发布限制
 
-此版本用于本地开发验收，**尚不建议公开分发构建包**。
+预构建版本通过 `release` 分支分发；桌面宿主中的画板渲染尚未在真实 Codex 对话中验收。
 
-- `npm audit` 当前仍有 6 个 high 条目，均属于 `braces` 经 `micromatch` / `chokidar` / `sass` / `vite-plugin-singlefile` 传播的依赖链（包含 Excalidraw 汇总条目），不是六种独立漏洞。未通过强制降级编辑器规避报告。需要后续替换构建链/核实上游修复后再发布。
+- `npm audit` 仍报告 `braces` 的 high 条目，经 `chokidar` / `sass`（Excalidraw 依赖）及构建链 `micromatch` / `vite-plugin-singlefile` 传播。这些包都不在打包产物中（与两份 `THIRD_PARTY_NOTICES.txt` 核对），仅存在于安装依赖树；未通过强制降级编辑器规避报告。
 - 已通过 overrides 修复锁定依赖中的 lodash-es 和 nanoid 报告，升级后重新跑构建与集成测试。
 - 首版不执行链接、不加载远程嵌入；但本地存储不等于离线推理，AI 宿主可以把工具返回内容发送给模型服务。
-- 第三方代码/字体许可汇总尚未完成，见 [来源说明](PROVENANCE.md)。仓库自身尚未选择开源许可证。
+- 第三方声明随每次构建生成，只打包许可已核实的字体，见 [来源说明](PROVENANCE.md)。

@@ -63,4 +63,4 @@ git diff --check
 
 ## 来源与许可
 
-第三方工具原则上应先明确来源和再分发许可，并保留原许可证及署名。Excalidraw 按用户明确要求先收录二创包，其上游许可尚未核实，详见 [来源与许可状态](plugins/excalidraw-diagrams/PROVENANCE.md)。当前未选择仓库级开源许可证；公开可见不等于授予再分发许可，也不能替代未来收录工具各自的许可证。
+第三方工具原则上应先明确来源和再分发许可，并保留原许可证及署名。Excalidraw 按用户明确要求先收录二创包，其上游许可尚未核实，详见 [来源与许可状态](plugins/excalidraw-diagrams/PROVENANCE.md)。本仓库自有内容采用 [MIT 许可证](LICENSE)。它不覆盖第三方内容：`plugins/excalidraw-diagrams/` 的上游许可仍未核实，不因本仓库许可证而获得再分发授权；打包进 `plugins/excalidraw` 构建产物的依赖与字体保留各自许可证（见其 [PROVENANCE](plugins/excalidraw/PROVENANCE.md)）。
