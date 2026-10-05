@@ -15,8 +15,16 @@ Installed upstream dependencies are pinned in `package-lock.json`, including int
 
 The Excalidraw MIT license was retrieved directly from its v0.18.1 tag and is retained in [licenses/excalidraw-MIT.txt](licenses/excalidraw-MIT.txt).
 
-Local modifications are integration code, not a vendored source fork. The Vite font transform inlines font assets from the installed package and substitutes its large Xiaolai fallback with Liberation plus system CJK fallback to remain below common stdio message limits. The original installed assets are not changed.
+Local modifications are integration code, not a vendored source fork. The Vite font transform inlines font assets from the installed package without modifying them, and substitutes the families listed below. The original installed assets are not changed.
 
-**Binary redistribution is not yet cleared.** Before distributing `dist/`, collect and preserve the notices for all bundled transitive dependencies and each bundled font (Assistant, Cascadia, ComicShanns, Excalifont, Liberation, Lilita, Nunito, Virgil). The editor's MIT license must not be treated as a substitute for those notices. Font-specific license files were not found in the inspected Excalidraw v0.18.1 tree, so this task remains a release blocker rather than a guessed license declaration.
+## Redistribution of the prebuilt release
 
-No built assets, dependency directories, user diagrams, screenshots, or host configuration are committed. The new package is marked `private: true`; the repository has no blanket open-source license.
+The `release` branch carries a built `dist/`, published by `.github/workflows/release-excalidraw.yml`. What it bundles and the notices it ships:
+
+- **npm packages**: every build writes `dist/ui/THIRD_PARTY_NOTICES.txt` and `dist/server/THIRD_PARTY_NOTICES.txt` from the packages actually present in that bundle's module graph, each with its declared license and the license file it ships. The build fails if a bundled package declares no license. At the time of writing: 87 UI and 13 server packages, all MIT, ISC, Apache-2.0 (no `NOTICE` files shipped), BSD-3-Clause, 0BSD, CC0-1.0 or MIT AND Zlib.
+- **Fonts**: only Assistant, Virgil, Lilita One, Nunito (OFL 1.1) and Comic Shanns (MIT) are shipped, with evidence read from each font file in [licenses/FONTS.md](licenses/FONTS.md). Excalifont, Cascadia Code and Liberation Sans could not be verified and are replaced at build time by a cleared family; Xiaolai is replaced for size. The transform fails the build if any other family would be inlined.
+- The Excalidraw MIT license is in [licenses/excalidraw-MIT.txt](licenses/excalidraw-MIT.txt); it does not substitute for the notices above.
+
+The repository itself still has no blanket license; that decision belongs to the owner and is independent of these third-party notices.
+
+The default branch commits no built assets, dependency directories, user diagrams, screenshots, or host configuration; only the generated `release` branch adds `dist/`. The new package is marked `private: true`; the repository has no blanket open-source license.

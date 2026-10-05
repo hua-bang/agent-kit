@@ -1,23 +1,36 @@
 import { defineConfig, type Plugin } from 'vite';
 import { withoutMermaidMenu } from './build/without-mermaid';
+import { thirdPartyNotices } from './build/notices';
 import { readFileSync, existsSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
+// Only fonts whose redistribution terms were verified are shipped (see licenses/FONTS.md).
+const clearedFamilies = new Set(['Assistant', 'ComicShanns', 'Lilita', 'Nunito', 'Virgil']);
+// Families without verified terms are served by a cleared face instead. Xiaolai is
+// also too large (12 MiB) for common stdio limits; CJK falls back to system fonts.
+const substitutes: Record<string, string> = {
+  Excalifont: 'Virgil/Virgil-Regular.woff2', // Excalifont's predecessor, same hand-drawn style
+  Cascadia: 'ComicShanns/ComicShanns-Regular-279a7b317d12eb88de06167bd672b4b4.woff2', // Latin monospace subset
+  Liberation: 'Assistant/Assistant-Regular.woff2',
+  Xiaolai: 'Assistant/Assistant-Regular.woff2',
+};
 // Excalidraw's runtime font URLs are string literals, not imports. Inline them
 // so a sandboxed MCP resource does not need an external font CDN.
 function localFonts(): Plugin {
   return { name: 'excalidraw-local-fonts', enforce: 'pre', transform(code, id) {
     if (!id.includes('@excalidraw/excalidraw/dist/') || !id.endsWith('.js')) return;
-    let needsFallback = false;
-    const transformed = code.replace(/(["'])\.\/fonts\/([^"']+\.woff2)\1/g, (_match, quote, file) => {
-      // The 12 MiB Xiaolai font alone exceeds common stdio message limits.
-      // Use Liberation's Latin face, with system CJK fallback for missing glyphs.
-      if (file.startsWith('Xiaolai/')) { needsFallback = true; return '__localCjkFallback'; }
-      const path = resolve(dirname(id), 'fonts', file);
-      if (!existsSync(path)) throw new Error('Missing editor font: ' + file);
-      return quote + 'data:font/woff2;base64,' + readFileSync(path).toString('base64') + quote;
+    // One shared constant per font file, so a face substituted for many subsets is inlined once.
+    const consts = new Map<string, string>();
+    const transformed = code.replace(/(["'])\.\/fonts\/([^"'/]+)\/([^"']+\.woff2)\1/g, (_match, _quote, family: string, file: string) => {
+      const source = substitutes[family] ?? `${family}/${file}`;
+      if (!clearedFamilies.has(source.split('/')[0])) throw new Error(`Font family without verified license: ${family}`);
+      const path = resolve(dirname(id), 'fonts', source);
+      if (!existsSync(path)) throw new Error('Missing editor font: ' + source);
+      if (!consts.has(source)) consts.set(source, `__localFont${consts.size}`);
+      return consts.get(source)!;
     });
-    const fallback = needsFallback ? 'const __localCjkFallback="data:font/woff2;base64,' + readFileSync(resolve(dirname(id), 'fonts/Liberation/LiberationSans-Regular.woff2')).toString('base64') + '";\n' : '';
-    return fallback + transformed;
+    const header = [...consts].map(([source, name]) =>
+      `const ${name}="data:font/woff2;base64,${readFileSync(resolve(dirname(id), 'fonts', source)).toString('base64')}";\n`).join('');
+    return header + transformed;
   } };
 }
 import react from '@vitejs/plugin-react';
@@ -43,6 +56,6 @@ function lightweightBudget(): Plugin {
 }
 export default defineConfig({
   resolve: { alias: [{ find: /^@excalidraw\/mermaid-to-excalidraw$/, replacement: resolve(import.meta.dirname, 'src/app/mermaid-text-fallback.ts') }] },
-  plugins: [withoutMermaidMenu(), localFonts(), react(), viteSingleFile(), lightweightBudget()],
+  plugins: [withoutMermaidMenu(), localFonts(), react(), viteSingleFile(), lightweightBudget(), thirdPartyNotices()],
   build: { outDir: 'dist/ui', assetsInlineLimit: 100_000_000, cssCodeSplit: false },
 });

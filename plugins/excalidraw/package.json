@@ -8,9 +8,9 @@
   },
   "scripts": {
     "dev": "vite --host 127.0.0.1",
-    "build": "vite build && tsc -p tsconfig.server.json",
+    "build": "vite build && vite build -c vite.server.config.ts",
     "start": "node dist/server/index.js",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.server.json --noEmit",
     "test": "vitest run",
     "test:plugin": "node scripts/plugin-smoke.mjs",
     "test:stdio": "node scripts/smoke.mjs",

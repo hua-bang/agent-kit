@@ -10,9 +10,9 @@ if (major < 22) {
 try {
   await access(new URL('../dist/server/index.js', import.meta.url));
   await access(new URL('../dist/ui/index.html', import.meta.url));
-  await import.meta.resolve('@modelcontextprotocol/sdk/server/mcp.js');
 } catch {
-  console.error('Local Excalidraw is not built or dependencies are missing. In the installed plugin directory, run npm ci && npm run build, then restart the host. Installation downloads dependencies and runs lifecycle scripts; startup never installs automatically.');
+  // The server bundle includes its dependencies; only the build output is required.
+  console.error('Local Excalidraw is not built. Install from the prebuilt release branch, or run npm ci && npm run build in the plugin directory, then restart the host. Startup never installs or builds automatically.');
   process.exit(1);
 }
 await import('../dist/server/index.js');

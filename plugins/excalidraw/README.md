@@ -21,14 +21,27 @@ excalidraw/
 ├── skills/excalidraw/SKILL.md   # 随插件安装的 Agent 工作流
 ├── scripts/start.mjs           # 与宿主 cwd 无关；缺少构建时明确失败
 ├── package.json / package-lock.json
-└── dist/                       # 本地构建后生成，不提交
+├── licenses/                   # Excalidraw MIT、字体许可（FONTS.md）
+└── dist/                       # 构建产物；默认分支不提交，release 分支自带
 ```
 
 仓库的 [本地 marketplace](../../.agents/plugins/marketplace.json) 提供 `excalidraw@agent-kit-local`，不自动启用插件，不修改用户配置。根 `skills/` 和 `mcp.json` 由支持规范的宿主发现；不需要把 skill 再安装一份。
 
-### 在 Codex 安装整包（不是只注册 MCP）
+### 在 Codex 安装预构建版本（推荐）
 
-从仓库根目录执行；当前源码尚未推送，测试应使用本地工作树，不要从远端 master 安装旧版本。
+`release` 分支由 [GitHub Action](../../.github/workflows/release-excalidraw.yml) 在默认分支更新后自动构建、测试并发布，自带 `dist/`，不需要克隆、npm 或构建。需要 Node 22+（建议 24）在宿主 PATH 中可用。
+
+```sh
+# 以下两条会修改当前用户的 Codex marketplace / plugin 配置
+codex plugin marketplace add hua-bang/agent-kit --ref release
+codex plugin add excalidraw@agent-kit-local
+```
+
+更新：`codex plugin marketplace upgrade` 后重新 `codex plugin add excalidraw@agent-kit-local`。服务端已打包为单文件，`release` 分支没有 `node_modules` 也能运行；随附第三方声明见 `dist/*/THIRD_PARTY_NOTICES.txt` 与 [字体许可](licenses/FONTS.md)。
+
+### 从源码安装（开发）
+
+从仓库根目录执行，使用本地工作树：
 
 ```sh
 # 首次准备；npm ci 会联网下载依赖并运行安装脚本
@@ -43,7 +56,7 @@ codex plugin marketplace add "$PWD"
 codex plugin add excalidraw@agent-kit-local
 ```
 
-先构建再安装：本地 Codex 会把插件复制进缓存。只安装未构建的源码不能启动服务；启动脚本不会偷偷执行 npm install。Node 必须在宿主 PATH 中可用，建议 Node 24。
+先构建再安装：本地 Codex 会把插件复制进缓存。只安装未构建的源码不能启动服务；启动脚本不会执行 npm install 或构建。Node 必须在宿主 PATH 中可用，建议 Node 24。
 
 安装后重启桌面端或开启新会话，发送：
 
@@ -57,7 +70,7 @@ codex plugin add excalidraw@agent-kit-local
 
 已在临时 `CODEX_HOME` 实测 marketplace 注册和 `codex plugin add`，并从安装缓存验证 skill、stdio 工具读写和 UI 资源。**尚未验证真实桌面对话的 skill 自动触发和画板渲染**，也未修改用户的正式 Codex 配置。CLI 不能显示交互画板。
 
-参考：[Agent Plugins 参考包](../excalidraw-diagrams/README.md)、[OpenAI 插件打包文档](https://developers.openai.com/plugins/build/plugins)。本地开发安装不等于获得公开发布许可，仍受本文末尾发布限制约束。
+参考：[Agent Plugins 参考包](../excalidraw-diagrams/README.md)、[OpenAI 插件打包文档](https://developers.openai.com/plugins/build/plugins)。第三方与字体再分发依据见 [PROVENANCE.md](PROVENANCE.md)；仓库本身尚未选择许可证。
 
 ## 安装与构建
 
@@ -72,7 +85,7 @@ npm run build
 npm run test:stdio
 ```
 
-`npm ci` 会联网下载依赖并可能运行依赖安装脚本。`build` 写入被 Git 忽略的 `dist/`，不访问用户图纸目录。
+`npm ci` 会联网下载依赖并可能运行依赖安装脚本。`build` 写入被 Git 忽略的 `dist/`（UI 单文件 HTML + 打包后的单文件服务端 + 各自的 `THIRD_PARTY_NOTICES.txt`），不访问用户图纸目录。
 `npm start` 启动 stdio 服务，不是网页服务器；不要在 shell 中等待网页地址，也不要把日志输出写到 stdout。
 
 在支持本地 stdio 的 MCP 宿主中配置以下内容，将路径替换成你的实际绝对路径：
@@ -126,7 +139,7 @@ npm run test:stdio
 
 一个独立 TypeScript 包；React 18.3 + Excalidraw 0.18.1、MCP SDK 1.32 + MCP Apps 1.7.5、Vite、普通 CSS。使用 MCP Apps v1 与 MCP SDK v1 配对，未混入 SDK v2。
 
-真实编辑器本身有体积成本：自包含 HTML 约 5.56 MB（本次 UI 改造后；准确字节数以构建输出为准），相比原始 9.01 MB 减少约 38.4%。JS/CSS 和常用字体在本地构建时内联，不从 CDN 加载。Xiaolai 字体约 12 MiB，未打包：其占位使用 Liberation 拉丁字形，中文回退系统字体，不保证跨 OS 字形完全一致。字体原包没有被修改，转换仅发生在构建产物中。
+真实编辑器本身有体积成本：自包含 HTML 约 5.23 MB（准确字节数以构建输出为准），相比原始 9.01 MB 减少约 42%。JS/CSS 和字体在本地构建时内联，不从 CDN 加载。只打包许可已核实的字体：Excalifont、Cascadia Code、Liberation 分别以 Virgil、Comic Shanns、Assistant 渲染，Xiaolai（约 12 MiB）以 Assistant 加系统中文字体代替，详见 [字体许可](licenses/FONTS.md)。图纸文件中的字体设置不变，仅本插件内显示字形不同；字体原文件未被修改。
 
 Mermaid 转换库及其 Mermaid/Cytoscape/KaTeX 依赖图不进入 UI 构建；粘贴 Mermaid 源码会保留为可编辑文本，不转换为图形。Agent 仍直接生成或修改 Excalidraw 元素。保留全部现有语言包与字体子集化能力。
 
