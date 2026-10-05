@@ -24,7 +24,7 @@ try {
       if (req.url === '/host.js') { res.setHeader('Content-Type', 'text/javascript'); res.end(hostScript); }
       else if (req.url.startsWith('/app?')) {
         res.setHeader('Content-Type', 'text/html');
-        res.setHeader('Content-Security-Policy', "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; font-src data:; img-src data: blob:; connect-src 'none'; worker-src blob:");
+        res.setHeader('Content-Security-Policy', "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; font-src data:; img-src data:; connect-src 'none'; worker-src blob:");
         res.end(resources[new URL(req.url, 'http://localhost').searchParams.get('surface')]);
       } else if (req.url === '/tool') {
         let body = ''; for await (const chunk of req) body += chunk;

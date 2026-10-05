@@ -4,7 +4,7 @@ import { applyDocumentTheme, type McpUiTheme } from '@modelcontextprotocol/ext-a
 import type { ExcalidrawImperativeAPI } from '@excalidraw/excalidraw/types';
 import { bridge, callTool } from './bridge';
 import { Preview } from './Preview';
-import { Mark, IconBack, IconCanvas, IconCopy, IconDownload, IconLock, IconPencil, IconPlus, IconRefresh, IconSave, IconSearch } from './icons';
+import { IconBack, IconCanvas, IconCopy, IconDownload, IconLock, IconPencil, IconPlus, IconRefresh, IconSave, IconSearch } from './icons';
 import { documentSchema, sceneSchema, sceneOf, type Drawing, type DrawingSummary, type Scene } from '../shared/schemas';
 
 type Library = { drawings: DrawingSummary[]; warnings: string[] };
@@ -231,17 +231,15 @@ export function App() {
           <span className="preview-hint" aria-hidden="true"><IconPencil />点击编辑</span>
         </button>
         <div className="card-bar">
-          <Mark />
           <div className="heading">
             <h1>{doc.plugin.title}</h1>
-            <span className="meta">Excalidraw · 更新于 {relativeTime(doc.plugin.updatedAt)} · r{doc.plugin.revision}</span>
+            <span className="meta">更新于 {relativeTime(doc.plugin.updatedAt)}<span className="sep">·</span><span className="mono">r{doc.plugin.revision}</span></span>
           </div>
           <button ref={expandButton} className="primary" onClick={expand}><IconPencil />展开编辑</button>
         </div>
       </section>
     </> : isLibrary ? <>
       <header className="library-head">
-        <Mark />
         <div className="heading">
           <h1>图纸库</h1>
           <span className="meta"><IconLock />{library ? `${library.drawings.length} 张图纸 · 仅保存在本机` : '仅保存在本机'}</span>
@@ -250,23 +248,25 @@ export function App() {
       </header>
       {messages}
       <section id="main-content" className="library" aria-label="图纸库">
-        <div className="composer" role="group" aria-label="新建图纸">
-          <input aria-label="新图纸名称" placeholder="给新图纸起个名字" value={newTitle} maxLength={160} onChange={e => setNewTitle(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) e.currentTarget.parentElement?.querySelector('button')?.click(); }} />
-          <button type="button" className="primary" disabled={!connected || busy} onClick={() => void action(async () => {
-            load((await callTool<{ document: Drawing }>('create_drawing', { title: newTitle.trim() || '未命名图纸' })).document);
-            setNewTitle(''); setNotice('');
-          })}><IconPlus />新建图纸</button>
+        <div className="toolbar">
+          <label className="search"><IconSearch />
+            <input type="search" aria-label="搜索图纸" placeholder="搜索图纸…" value={query} onChange={e => { setQuery(e.target.value); setLimit(20); }} />
+          </label>
+          <div className="composer" role="group" aria-label="新建图纸">
+            <input aria-label="新图纸名称" placeholder="新图纸名称" value={newTitle} maxLength={160} onChange={e => setNewTitle(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) e.currentTarget.parentElement?.querySelector('button')?.click(); }} />
+            <button type="button" className="primary" disabled={!connected || busy} onClick={() => void action(async () => {
+              load((await callTool<{ document: Drawing }>('create_drawing', { title: newTitle.trim() || '未命名图纸' })).document);
+              setNewTitle(''); setNotice('');
+            })}><IconPlus />新建图纸</button>
+          </div>
         </div>
-        <label className="search"><IconSearch />
-          <input type="search" aria-label="搜索图纸" placeholder="搜索图纸" value={query} onChange={e => { setQuery(e.target.value); setLimit(20); }} />
-        </label>
         <div className="list-caption"><span>{query ? '搜索结果' : '最近修改'}</span><span>{library ? `${matches.length} 张` : '读取中'}</span></div>
         {!library ? <p className="empty-state" role="status">{error ? '无法读取图纸，请重试。' : connected ? '读取本地图纸中' : '等待 MCP 宿主连接'}</p> : <>
           {library.warnings.length > 0 && <p className="banner error inline" role="alert">{library.warnings.length} 个图纸文件无法读取，原文件未修改。</p>}
           <div className="drawing-grid" aria-busy={refreshing}>
             {matches.slice(0, limit).map(d => <button className="drawing" key={d.id} disabled={busy || refreshing} onClick={() => void action(async () => {
               load((await callTool<{ document: Drawing }>('read_drawing', { id: d.id })).document); setNotice('');
-            })}><Preview summary={d} dark={theme === 'dark'} /><span className="drawing-info"><strong>{d.title}</strong><span>{relativeTime(d.updatedAt)} · r{d.revision}</span></span></button>)}
+            })}><Preview summary={d} dark={theme === 'dark'} /><span className="drawing-info"><strong>{d.title}</strong><span className="meta">{relativeTime(d.updatedAt)}<span className="sep">·</span><span className="mono">r{d.revision}</span></span></span></button>)}
           </div>
           {matches.length > limit && <button className="ghost more" onClick={() => setLimit(value => value + 20)}>显示更多图纸</button>}
           {!library.drawings.length && <div className="empty-state"><span className="empty-icon"><IconCanvas /></span><strong>从一张空白图纸开始</strong><p>新建图纸，或让 Agent 帮你画。</p></div>}

@@ -20,7 +20,6 @@ export function Preview({ document: doc, summary, dark = false }: { document?: D
   useEffect(() => {
     if (!visible) return;
     let cancelled = false;
-    let url = '';
     setImage(''); setState('读取预览中');
     void (async () => {
       const source = doc ?? (await callTool<{ document: Drawing }>('read_drawing', { id: summary!.id })).document;
@@ -31,10 +30,16 @@ export function Preview({ document: doc, summary, dark = false }: { document?: D
       const background = String(source.appState.viewBackgroundColor ?? '#ffffff').toLowerCase();
       const exportBackground = !['#ffffff', '#fff', 'white', 'transparent'].includes(background);
       const blob = await exportToBlob({ ...restored, appState: { ...restored.appState, exportBackground, exportWithDarkMode: dark, exportEmbedScene: false }, maxWidthOrHeight: doc ? 1600 : 480, mimeType: 'image/png' });
-      if (cancelled) return;
-      url = URL.createObjectURL(blob); setImage(url);
+      // Host CSPs commonly allow data: images but not blob:, so inline the PNG.
+      const url = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result));
+        reader.onerror = () => reject(reader.error);
+        reader.readAsDataURL(blob);
+      });
+      if (!cancelled) setImage(url);
     })().catch(() => { if (!cancelled) setState('预览不可用，可打开编辑'); });
-    return () => { cancelled = true; if (url) URL.revokeObjectURL(url); };
+    return () => { cancelled = true; };
   }, [visible, doc, dark, summary?.id, summary?.revision]);
   return <span className="scene-preview" ref={container}>
     {image ? <img src={image} alt={`${doc?.plugin.title ?? summary?.title}的图纸预览`} /> : <span className="preview-placeholder">{state}</span>}

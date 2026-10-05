@@ -14,12 +14,3 @@ export const IconDownload = svg(<><path d="M12 4v11M7 10l5 5 5-5" /><path d="M5 
 export const IconCopy = svg(<><rect x="8" y="8" width="12" height="12" rx="2" /><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" /></>);
 export const IconLock = svg(<><rect x="5" y="11" width="14" height="9" rx="2" /><path d="M8 11V8a4 4 0 0 1 8 0v3" /></>);
 export const IconCanvas = svg(<><rect x="3" y="4" width="18" height="16" rx="3" /><path d="M7 15c2-4 4-4 5-1s3 3 5-2" /></>);
-
-/** Product mark: a hand-drawn stroke in a rounded tile, not the Excalidraw logo. */
-export function Mark() {
-  return <span className="mark" aria-hidden="true">
-    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" focusable="false">
-      <path d="M5 16c2.5-6 5-8 6.5-5.5S14 16 16 13s2-6 3-7" />
-    </svg>
-  </span>;
-}
