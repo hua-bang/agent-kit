@@ -19,7 +19,7 @@ export const LIBRARY_URI = 'ui://excalidraw/library.html';
 export const drawingUri = (id: string) => `excalidraw://drawings/${id}`;
 const DRAWING_MIME = 'application/vnd.excalidraw+json';
 export function createServer(store = new DrawingStore(), htmlPath = new URL('../ui/index.html', import.meta.url)) {
-  const server = new McpServer({ name: 'local-excalidraw', version: '0.1.0', icons: [SIDEBAR_ICON] });
+  const server = new McpServer({ name: 'local-excalidraw', title: 'Agentic Excalidraw', version: '0.1.0', icons: [SIDEBAR_ICON] });
   const ui = { resourceUri: UI_URI };
   const readonly = { readOnlyHint: true, openWorldHint: false };
   const writable = { readOnlyHint: false, destructiveHint: false, openWorldHint: false };
@@ -38,7 +38,7 @@ export function createServer(store = new DrawingStore(), htmlPath = new URL('../
     }
   };
   for (const [uri, surface] of [[UI_URI, 'drawing'], [LIBRARY_URI, 'library']] as const) {
-    registerAppResource(server, `Excalidraw ${surface}`, uri, {}, async () => ({ contents: [{
+    registerAppResource(server, `Agentic Excalidraw ${surface}`, uri, {}, async () => ({ contents: [{
       uri, mimeType: RESOURCE_MIME_TYPE,
       text: (await readFile(htmlPath, 'utf8')).replace('<head>', `<head><meta name="excalidraw-surface" content="${surface}">`),
       _meta: { ui: { prefersBorder: true, csp: { connectDomains: [], resourceDomains: [] } } },
@@ -50,7 +50,7 @@ export function createServer(store = new DrawingStore(), htmlPath = new URL('../
       uri: drawingUri(d.id), name: d.title, mimeType: DRAWING_MIME, description: describe(d),
     })) }),
   }), {
-    title: 'Excalidraw drawing',
+    title: 'Agentic Excalidraw drawing',
     description: 'A locally saved drawing: standard .excalidraw JSON plus a plugin field with id, title and revision. Use read_drawing/patch_drawing to edit.',
     mimeType: DRAWING_MIME,
   }, async (uri, { id }) => ({
@@ -58,7 +58,7 @@ export function createServer(store = new DrawingStore(), htmlPath = new URL('../
   }));
   // OpenAI composer at-mentions: the host calls this as the user types "@…"; it is hidden from the model.
   server.registerTool('mention_drawings', {
-    title: 'Excalidraw 图纸',
+    title: 'Agentic Excalidraw 图纸',
     description: 'Typeahead search for @-mentioning local drawings. Called by the host composer, not by the model.',
     inputSchema: { query: z.string().max(200).default('') },
     annotations: readonly,
@@ -76,14 +76,14 @@ export function createServer(store = new DrawingStore(), htmlPath = new URL('../
     }
   });
   registerAppTool(server, 'open_library', {
-    title: 'Excalidraw 图纸库', description: 'Open the dedicated local drawing library, intended for Sidebar. If the host cannot show Sidebar, this explicit library tool can open a library App. Use open_drawing for conversation cards.',
+    title: 'Agentic Excalidraw 图纸库', description: 'Open the dedicated local drawing library, intended for Sidebar. If the host cannot show Sidebar, this explicit library tool can open a library App. Use open_drawing for conversation cards.',
     inputSchema: {}, annotations: readonly,
     _meta: { ui: { resourceUri: LIBRARY_URI }, ...(process.env.EXCALIDRAW_ENABLE_SIDEBAR === '0' ? {} : { 'openai/ui': { entrypoints: [{ type: 'global' }] } }) },
   }, () => guarded(async () => ({ view: 'library', ...await store.list() })));
   server.registerTool('list_drawings', { description: 'List locally saved drawings without opening a UI.', inputSchema: {}, annotations: readonly },
     () => guarded(() => store.list()));
   registerAppTool(server, 'open_drawing', {
-    description: 'Open a specific drawing in the inline Excalidraw MCP App.',
+    description: 'Open a specific drawing in the inline Agentic Excalidraw MCP App.',
     inputSchema: { id: idSchema }, _meta: { ui }, annotations: readonly,
   }, ({ id }) => guarded(async () => ({ document: await store.read(id) })));
   server.registerTool('read_drawing', {

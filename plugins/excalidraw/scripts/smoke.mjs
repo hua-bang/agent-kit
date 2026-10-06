@@ -17,7 +17,11 @@ async function call(name, args = {}) {
 }
 try {
   await connect();
+  assert.equal(client.getServerVersion().name, 'local-excalidraw');
+  assert.equal(client.getServerVersion().title, 'Agentic Excalidraw');
   const tools = await client.listTools(); assert.equal(tools.tools.length, 8);
+  assert.equal(tools.tools.find(t => t.name === 'open_library').title, 'Agentic Excalidraw 图纸库');
+  assert.equal(tools.tools.find(t => t.name === 'mention_drawings').title, 'Agentic Excalidraw 图纸');
   const resources = await client.listResources(); assert.equal(resources.resources.length, 2);
   assert.equal(tools.tools.find(t => t.name === 'open_library')._meta.ui.resourceUri, 'ui://excalidraw/library.html');
   // Sidebar (global) entrypoint is on by default, with a monochrome SVG server icon.
@@ -30,6 +34,8 @@ try {
   assert.ok(libraryHtml.contents[0].text.includes('name="excalidraw-surface" content="library"'));
   const html = await client.readResource({ uri: resources.resources[0].uri });
   assert.ok(html.contents[0].text.includes('<!doctype html>'));
+  assert.ok(html.contents[0].text.includes('<title>Agentic Excalidraw</title>'));
+  assert.ok(resources.resources.every(r => r.name.startsWith('Agentic Excalidraw ')));
   assert.ok(!html.contents[0].text.match(/<script[^>]*>/)?.[0].includes('src='));
   const { document: doc } = await call('create_drawing', { title: '集成验证' });
   const id = doc.plugin.id;
