@@ -8,6 +8,8 @@ const call = async (name: string, args = {}) => (await fetch('/tool', { method: 
 bridge.oncalltool = params => call(params.name, params.arguments);
 // Record what the view reports to the model, so the smoke test can assert on it.
 bridge.onupdatemodelcontext = async params => { Object.assign(window, { modelContext: params }); return {}; };
+// What an OpenAI host sends when the user removes the context attachment.
+Object.assign(window, { removeModelContext: () => bridge.sendHostContextChange({ 'openai/modelContext': null } as never) });
 bridge.oninitialized = async () => {
   await bridge.sendToolInput({ arguments: id ? { id } : {} });
   await bridge.sendToolResult(await call(id ? 'open_drawing' : 'open_library', id ? { id } : {}));

@@ -38,6 +38,8 @@ export function App() {
   const [editorKey, setEditorKey] = useState(0);
   const mounted = useRef(true);
   const handlers = useRef({ receive: (_: Payload) => {} });
+  const sentContext = useRef<string | null>(null);
+  const dismissedContext = useRef<string | null>(null);
   const [theme, setTheme] = useState<McpUiTheme>(() => matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
   useEffect(() => applyDocumentTheme(theme), [theme]);
 
@@ -68,6 +70,8 @@ export function App() {
     bridge.onhostcontextchanged = context => {
       if (context.theme) setTheme(context.theme);
       if (context.containerDimensions || context.displayMode) applyFill();
+      // OpenAI hosts clear this when the user removes the context attachment.
+      if ((context as Record<string, unknown>)['openai/modelContext'] === null) dismissedContext.current = sentContext.current;
     };
     bridge.connect().then(() => {
       if (!mounted.current) return;
@@ -146,11 +150,15 @@ export function App() {
   // Tool calls made by this view never reach the model on their own. Report what
   // is on screen so the user can refer to "this list" or "this drawing" in chat.
   // Each update replaces the previous one; hosts without support are skipped.
+  // If the user removes the attachment, stay quiet until they move to another view.
   useEffect(() => {
     if (!connected || !bridge.getHostCapabilities()?.updateModelContext?.text) return;
     const timer = setTimeout(() => {
       const context = describeView(isLibrary, editing, doc, library, query);
-      if (context) void bridge.updateModelContext(context).catch(() => {});
+      if (!context || context.key === dismissedContext.current) return;
+      dismissedContext.current = null;
+      sentContext.current = context.key;
+      void bridge.updateModelContext(context.params).catch(() => {});
     }, 400);
     return () => clearTimeout(timer);
   }, [connected, editing, doc?.plugin.id, doc?.plugin.revision, doc?.plugin.title, library, query]);
@@ -291,8 +299,13 @@ export function App() {
   </main>;
 }
 
-/** Markdown plus structured data describing the current view, for ui/update-model-context. */
+/**
+ * Text plus structured data describing the current view, for ui/update-model-context.
+ * `key` identifies the view (not its contents) so a removed attachment stays removed until it changes.
+ * `openai/title` labels the composer attachment on OpenAI hosts; other hosts ignore it.
+ */
 function describeView(isLibrary: boolean, editing: boolean, doc: Drawing | null, library: Library | null, query: string) {
+  const block = (title: string, text: string) => ({ type: 'text' as const, text, _meta: { 'openai/title': title } });
   const drawing = (d: DrawingSummary) => ({ id: d.id, title: d.title, revision: d.revision, updatedAt: d.updatedAt });
   if (doc) {
     const view = editing ? 'editor' : 'preview';
@@ -300,7 +313,10 @@ function describeView(isLibrary: boolean, editing: boolean, doc: Drawing | null,
       + `(id ${doc.plugin.id}, revision ${doc.plugin.revision}, ${doc.elements.filter(e => !e.isDeleted).length} elements). `
       + 'Call read_drawing with this id for its latest content before describing or changing it; use patch_drawing with the latest revision to edit.'
       + (editing ? ' The editor autosaves about every 1.2 seconds.' : '');
-    return { content: [{ type: 'text' as const, text }], structuredContent: { app: 'local-excalidraw', view, drawing: drawing(doc.plugin) } };
+    return { key: `${view}:${doc.plugin.id}`, params: {
+      content: [block(`Excalidraw · ${doc.plugin.title}`, text)],
+      structuredContent: { app: 'local-excalidraw', view, drawing: drawing(doc.plugin) },
+    } };
   }
   if (!isLibrary || !library) return null;
   const needle = query.toLocaleLowerCase();
@@ -313,7 +329,10 @@ function describeView(isLibrary: boolean, editing: boolean, doc: Drawing | null,
     ...(shown.length > listed.length ? [`- …and ${shown.length - listed.length} more; call list_drawings for all.`] : []),
     'Call read_drawing with an id to see a drawing\'s content.',
   ].join('\n');
-  return { content: [{ type: 'text' as const, text }], structuredContent: { app: 'local-excalidraw', view: 'library', query, total: library.drawings.length, drawings: listed.map(drawing) } };
+  return { key: `library:${query}`, params: {
+    content: [block(`Excalidraw 图纸库 · ${query ? `${shown.length}/` : ''}${library.drawings.length} 张`, text)],
+    structuredContent: { app: 'local-excalidraw', view: 'library', query, total: library.drawings.length, drawings: listed.map(drawing) },
+  } };
 }
 
 /** A host-fixed height (sidebar, fullscreen) means the editor should fit it, not grow past it. */

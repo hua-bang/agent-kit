@@ -17,6 +17,7 @@ Tool names may be prefixed by the host's server name. This portable Agent Plugin
 - If the server is missing, explain that the whole plugin must be installed and built; follow the README. Do not modify host configuration or install dependencies without authorization.
 - For “open my library”, call `open_library`. For a named existing drawing, list and resolve its ID; ask when multiple names match.
 - When the user refers to “the list”, “my drawings”, “this page” or “this drawing” while the Excalidraw library or a drawing card is open, they mean this plugin's data. Loads made by the UI itself do not reach you: use the drawing IDs in any app context the host provides (the UI reports its current view when the host supports it), otherwise call `list_drawings`, and `read_drawing` for a specific drawing. Do not ask which list they mean.
+- A user may @-mention a drawing, which attaches a link like `excalidraw://drawings/<id>`. The last path segment is the drawing ID: read the resource if your host can, otherwise call `read_drawing` with that ID. Never edit through the resource; use `patch_drawing`/`save_drawing`.
 - If tools work but no editor appears, distinguish MCP connectivity from host MCP Apps support. Do not repeatedly create drawings to diagnose UI rendering.
 - Mermaid conversion is intentionally unavailable. Generate standard Excalidraw elements directly; Mermaid pasted into the editor remains text.
 

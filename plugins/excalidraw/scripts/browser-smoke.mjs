@@ -113,6 +113,16 @@ try {
   const libraryContext = await page.evaluate(() => window.modelContext);
   assert.match(libraryContext.content[0].text, /独立副本/);
   assert.ok(libraryContext.structuredContent.drawings.some(d => d.id === copy.id), 'Model context lists drawing IDs');
+  assert.equal(libraryContext.content[0]._meta['openai/title'], 'Excalidraw 图纸库 · 2 张');
+  // A removed attachment stays removed while the view is unchanged, and returns when the view changes.
+  await page.evaluate(() => { window.removeModelContext(); window.modelContext = undefined; });
+  await frame.getByRole('button', { name: '刷新', exact: true }).click();
+  await page.waitForTimeout(1200);
+  assert.equal(await page.evaluate(() => window.modelContext), undefined, 'Removed context is not re-added on refresh');
+  await frame.getByLabel('搜索图纸').fill('独立');
+  await page.waitForFunction(() => window.modelContext?.structuredContent?.query === '独立');
+  assert.equal(await page.evaluate(() => window.modelContext.content[0]._meta['openai/title']), 'Excalidraw 图纸库 · 1/2 张');
+  await frame.getByLabel('搜索图纸').fill('');
   await frame.getByLabel('搜索图纸').fill('不存在的图纸');
   await frame.getByText('没有匹配的图纸。').waitFor();
   await frame.getByRole('button', { name: '清除搜索' }).click();
