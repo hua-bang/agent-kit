@@ -1,14 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
 import { exportToBlob, restore } from '@excalidraw/excalidraw';
 import { callTool } from './bridge';
+import type { Messages, PreviewState } from './i18n';
 import { sceneOf, type Drawing, type DrawingSummary } from '../shared/schemas';
 
 /** Library thumbnail, rasterized with the real SDK; never inject drawing text as HTML or SVG. */
-export function Preview({ summary, dark = false }: { summary: DrawingSummary; dark?: boolean }) {
+export function Preview({ summary, dark = false, t }: { summary: DrawingSummary; dark?: boolean; t: Messages }) {
   const container = useRef<HTMLSpanElement>(null);
   const [visible, setVisible] = useState(false);
   const [image, setImage] = useState('');
-  const [state, setState] = useState('读取预览中');
+  const [state, setState] = useState<PreviewState>('loading');
   useEffect(() => {
     if (!container.current) return;
     const observer = new IntersectionObserver(entries => {
@@ -20,11 +21,11 @@ export function Preview({ summary, dark = false }: { summary: DrawingSummary; da
   useEffect(() => {
     if (!visible) return;
     let cancelled = false;
-    setImage(''); setState('读取预览中');
+    setImage(''); setState('loading');
     void (async () => {
       const source = (await callTool<{ document: Drawing }>('read_drawing', { id: summary.id })).document;
       if (cancelled) return;
-      if (!source.elements.some(element => !element.isDeleted)) { setState('空白图纸'); return; }
+      if (!source.elements.some(element => !element.isDeleted)) { setState('empty'); return; }
       const restored = restore(sceneOf(source) as unknown as Parameters<typeof restore>[0], null, null);
       // Default white paper is drawn by the card itself so it can follow the host theme.
       const background = String(source.appState.viewBackgroundColor ?? '#ffffff').toLowerCase();
@@ -38,10 +39,10 @@ export function Preview({ summary, dark = false }: { summary: DrawingSummary; da
         reader.readAsDataURL(blob);
       });
       if (!cancelled) setImage(url);
-    })().catch(() => { if (!cancelled) setState('预览不可用，可打开编辑'); });
+    })().catch(() => { if (!cancelled) setState('unavailable'); });
     return () => { cancelled = true; };
   }, [visible, dark, summary.id, summary.revision]);
   return <span className="scene-preview" ref={container}>
-    {image ? <img src={image} alt={`${summary.title}的图纸预览`} /> : <span className="preview-placeholder">{state}</span>}
+    {image ? <img src={image} alt={t.previewAlt(summary.title)} /> : <span className="preview-placeholder">{t.preview[state]}</span>}
   </span>;
 }

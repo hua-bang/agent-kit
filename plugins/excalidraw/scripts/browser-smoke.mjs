@@ -257,9 +257,16 @@ try {
   await page.goto(`http://127.0.0.1:${http.address().port}`);
   await frame.locator('.drawing img').first().waitFor();
   await page.screenshot({ path: '.test-output/qa-library-mobile.png' });
+  // English host locale: UI text and Excalidraw's own language follow it.
+  await page.goto(`http://127.0.0.1:${http.address().port}/?locale=en-US`);
+  await frame.getByRole('heading', { name: 'Drawings' }).waitFor();
+  await frame.getByRole('button', { name: /本地协作流程/ }).click();
+  await frame.getByLabel('Drawing title', { exact: true }).waitFor({ timeout: 12000 });
+  assert.equal(await frame.locator('main').getAttribute('lang'), 'en');
+  assert.equal(await frame.locator('.status .sr-only').innerText(), 'Saved');
   assert.deepEqual(errors, [], 'No uncaught browser errors');
   assert.deepEqual(external, [], 'No external network requests');
-  console.log('PASS: sandboxed official MCP App bridge, real Excalidraw pointer edit, autosave, Mermaid menu removal and Mermaid/plain-text paste, agent patch, reopen, 375px overflow, library thumbnails/search/copy, fixed-ID conversation card opening straight in the editor without writing, card autosave, live agent updates, no external requests');
+  console.log('PASS: sandboxed official MCP App bridge, real Excalidraw pointer edit, autosave, Mermaid menu removal and Mermaid/plain-text paste, agent patch, reopen, 375px overflow, library thumbnails/search/copy, English locale, fixed-ID conversation card opening straight in the editor without writing, card autosave, live agent updates, no external requests');
 } finally {
   await browser?.close(); await client.close(); if (http) await new Promise(resolve => http.close(resolve));
   await rm(dir, { recursive: true, force: true });

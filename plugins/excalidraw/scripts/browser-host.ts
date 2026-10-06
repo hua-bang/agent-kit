@@ -1,8 +1,9 @@
 import { AppBridge, PostMessageTransport } from '@modelcontextprotocol/ext-apps/app-bridge';
 const iframe = document.querySelector('iframe')!;
-const id = new URLSearchParams(location.search).get('drawing');
+const params = new URLSearchParams(location.search);
+const id = params.get('drawing');
 const bridge = new AppBridge(null, { name: 'local-test-host', version: '1' }, { serverTools: {}, updateModelContext: { text: {} } }, {
-  hostContext: { theme: 'light', displayMode: 'inline', availableDisplayModes: ['inline'], locale: 'zh-CN' },
+  hostContext: { theme: 'light', displayMode: 'inline', availableDisplayModes: ['inline'], locale: params.get('locale') ?? 'zh-CN' },
 });
 const call = async (name: string, args = {}) => (await fetch('/tool', { method: 'POST', body: JSON.stringify({ name, arguments: args }) })).json();
 bridge.oncalltool = params => call(params.name, params.arguments);
