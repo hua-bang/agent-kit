@@ -1,14 +1,25 @@
 import { readFile } from 'node:fs/promises';
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { McpServer, ResourceTemplate } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { registerAppResource, registerAppTool, RESOURCE_MIME_TYPE } from '@modelcontextprotocol/ext-apps/server';
 import { z } from 'zod';
 import { DrawingStore, ConflictError } from '../storage/drawings.js';
 import { idSchema, titleSchema, sceneSchema, elementSchema, type Drawing } from '../shared/schemas.js';
 
 export const UI_URI = 'ui://excalidraw/editor.html';
+// Sidebar icon per the OpenAI entrypoint guidelines: monochrome SVG, currentColor,
+// 20x20 viewport, 1.33px strokes. Served as the server icon, which hosts use for
+// entrypoints when a tool has no icon of its own.
+const SIDEBAR_ICON = {
+  src: 'data:image/svg+xml;base64,' + Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.33" stroke-linecap="round" stroke-linejoin="round"><rect x="2.67" y="3.33" width="14.67" height="13.33" rx="2.67"/><path d="M5.33 12.67c1.6-3.6 3.2-4.4 4-2.8s1.8 2.8 2.8 1.1 1.2-3.4 2.53-4.3"/></svg>').toString('base64'),
+  mimeType: 'image/svg+xml',
+  sizes: ['any'],
+};
 export const LIBRARY_URI = 'ui://excalidraw/library.html';
+// Each drawing is also a readable resource, so @-mentions and resource links resolve to its content.
+export const drawingUri = (id: string) => `excalidraw://drawings/${id}`;
+const DRAWING_MIME = 'application/vnd.excalidraw+json';
 export function createServer(store = new DrawingStore(), htmlPath = new URL('../ui/index.html', import.meta.url)) {
-  const server = new McpServer({ name: 'local-excalidraw', version: '0.1.0' });
+  const server = new McpServer({ name: 'local-excalidraw', version: '0.1.0', icons: [SIDEBAR_ICON] });
   const ui = { resourceUri: UI_URI };
   const readonly = { readOnlyHint: true, openWorldHint: false };
   const writable = { readOnlyHint: false, destructiveHint: false, openWorldHint: false };
@@ -33,10 +44,41 @@ export function createServer(store = new DrawingStore(), htmlPath = new URL('../
       _meta: { ui: { prefersBorder: true, csp: { connectDomains: [], resourceDomains: [] } } },
     }] }));
   }
+  const describe = (d: Drawing['plugin']) => `Revision ${d.revision}, updated ${d.updatedAt}`;
+  server.registerResource('drawing', new ResourceTemplate('excalidraw://drawings/{id}', {
+    list: async () => ({ resources: (await store.list()).drawings.map(d => ({
+      uri: drawingUri(d.id), name: d.title, mimeType: DRAWING_MIME, description: describe(d),
+    })) }),
+  }), {
+    title: 'Excalidraw drawing',
+    description: 'A locally saved drawing: standard .excalidraw JSON plus a plugin field with id, title and revision. Use read_drawing/patch_drawing to edit.',
+    mimeType: DRAWING_MIME,
+  }, async (uri, { id }) => ({
+    contents: [{ uri: uri.href, mimeType: DRAWING_MIME, text: JSON.stringify(await store.read(idSchema.parse(id))) }],
+  }));
+  // OpenAI composer at-mentions: the host calls this as the user types "@…"; it is hidden from the model.
+  server.registerTool('mention_drawings', {
+    title: 'Excalidraw 图纸',
+    description: 'Typeahead search for @-mentioning local drawings. Called by the host composer, not by the model.',
+    inputSchema: { query: z.string().max(200).default('') },
+    annotations: readonly,
+    _meta: { 'openai/extensions': { 'mentions/search': {} }, ui: { visibility: ['app'] } },
+  }, async ({ query }) => {
+    try {
+      const needle = query.trim().toLocaleLowerCase();
+      const items = (await store.list()).drawings
+        .filter(d => d.title.toLocaleLowerCase().includes(needle)).slice(0, 20)
+        .map(d => ({ type: 'resource_link' as const, uri: drawingUri(d.id), name: d.title, mimeType: DRAWING_MIME, description: describe(d) }));
+      return { content: [], structuredContent: { items } };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Search failed';
+      return { isError: true, content: [{ type: 'text' as const, text: message }] };
+    }
+  });
   registerAppTool(server, 'open_library', {
     title: 'Excalidraw 图纸库', description: 'Open the dedicated local drawing library, intended for Sidebar. If the host cannot show Sidebar, this explicit library tool can open a library App. Use open_drawing for conversation cards.',
     inputSchema: {}, annotations: readonly,
-    _meta: { ui: { resourceUri: LIBRARY_URI }, ...(process.env.EXCALIDRAW_ENABLE_SIDEBAR === '1' ? { 'openai/ui': { entrypoints: [{ type: 'global' }] } } : {}) },
+    _meta: { ui: { resourceUri: LIBRARY_URI }, ...(process.env.EXCALIDRAW_ENABLE_SIDEBAR === '0' ? {} : { 'openai/ui': { entrypoints: [{ type: 'global' }] } }) },
   }, () => guarded(async () => ({ view: 'library', ...await store.list() })));
   server.registerTool('list_drawings', { description: 'List locally saved drawings without opening a UI.', inputSchema: {}, annotations: readonly },
     () => guarded(() => store.list()));
@@ -49,7 +91,7 @@ export function createServer(store = new DrawingStore(), htmlPath = new URL('../
     inputSchema: { id: idSchema }, annotations: readonly,
   }, ({ id }) => guarded(async () => ({ document: await store.read(id) })));
   registerAppTool(server, 'create_drawing', {
-    description: 'Create a local drawing and show its fixed-ID preview. Expand the preview to edit. Optional scene contains Excalidraw elements; omit for a blank canvas.',
+    description: 'Create a local drawing and show it as a fixed-ID card that opens straight in the editor. Optional scene contains Excalidraw elements; omit for a blank canvas.',
     inputSchema: { title: titleSchema, scene: sceneSchema.optional() }, annotations: writable, _meta: { ui },
   }, ({ title, scene }) => guarded(async () => ({ document: await store.create(title, scene) })));
   server.registerTool('save_drawing', {

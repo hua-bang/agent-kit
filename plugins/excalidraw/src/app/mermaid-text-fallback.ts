@@ -6,7 +6,7 @@
  */
 export async function parseMermaidToExcalidraw(definition: string) {
   return {
-    elements: [{ type: 'text' as const, text: definition, x: 0, y: 0, fontFamily: 2 }],
+    elements: [{ type: 'text' as const, text: definition, x: 0, y: 0, fontFamily: 1 }],
     files: {},
   };
 }

@@ -24,7 +24,8 @@ try {
       if (req.url === '/host.js') { res.setHeader('Content-Type', 'text/javascript'); res.end(hostScript); }
       else if (req.url.startsWith('/app?')) {
         res.setHeader('Content-Type', 'text/html');
-        res.setHeader('Content-Security-Policy', "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; font-src data:; img-src data:; connect-src 'none'; worker-src blob:");
+        // Like an MCP Apps host with no resourceDomains: no font-src at all, so data: fonts are refused.
+        res.setHeader('Content-Security-Policy', "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; connect-src 'none'; worker-src blob:");
         res.end(resources[new URL(req.url, 'http://localhost').searchParams.get('surface')]);
       } else if (req.url === '/tool') {
         let body = ''; for await (const chunk of req) body += chunk;
@@ -41,6 +42,12 @@ try {
   await page.goto(`http://127.0.0.1:${http.address().port}`);
   const frame = page.frameLocator('iframe');
   // Drawing actions live in Excalidraw's main menu, not the header.
+  const until = async (check, timeout = 9000) => {
+    for (const end = Date.now() + timeout; !(await check());) {
+      if (Date.now() > end) throw new Error('Timed out waiting for condition');
+      await new Promise(resolve => setTimeout(resolve, 200));
+    }
+  };
   const menuItem = async name => {
     await frame.locator('[data-testid="main-menu-trigger"]').click();
     return frame.getByRole('button', { name, exact: true });
@@ -80,6 +87,8 @@ try {
     saved = (await client.callTool({ name: 'read_drawing', arguments: { id } })).structuredContent.document;
     const pasted = saved.elements.filter(e => e.type === 'text' && !e.isDeleted).map(e => e.text).join('\n');
     assert.ok(pasted.includes(text), `Pasted source is preserved as editable text: ${text}`);
+    // New text defaults to the hand-drawn Virgil face.
+    assert.ok(saved.elements.filter(e => e.type === 'text' && !e.isDeleted).every(e => e.fontFamily === 1), 'New text is hand-drawn (Virgil)');
   }
   await client.callTool({ name: 'patch_drawing', arguments: { id, expectedRevision: saved.plugin.revision, upsert: [{ id: 'agent-box', type: 'ellipse', x: original.x + 300, y: original.y, width: 120, height: 90 }] } });
   await page.waitForTimeout(6500);
@@ -108,72 +117,113 @@ try {
   await frame.getByRole('button', { name: '图纸列表', exact: true }).click();
   await frame.getByRole('button', { name: /独立副本/ }).waitFor();
   assert.equal(await frame.getByText('已打开独立副本，原图保持不变。').count(), 0, 'Copy notice does not linger on the list');
+  // The library reports its visible drawings to the model (ui/update-model-context).
+  await page.waitForFunction(() => window.modelContext?.structuredContent?.view === 'library' && window.modelContext.structuredContent.total === 2);
+  const libraryContext = await page.evaluate(() => window.modelContext);
+  assert.match(libraryContext.content[0].text, /独立副本/);
+  assert.ok(libraryContext.structuredContent.drawings.some(d => d.id === copy.id), 'Model context lists drawing IDs');
+  assert.equal(libraryContext.content[0]._meta['openai/title'], 'Excalidraw 图纸库 · 2 张');
+  // A removed attachment stays removed while the view is unchanged, and returns when the view changes.
+  await page.evaluate(() => { window.removeModelContext(); window.modelContext = undefined; });
+  await frame.getByRole('button', { name: '刷新', exact: true }).click();
+  await page.waitForTimeout(1200);
+  assert.equal(await page.evaluate(() => window.modelContext), undefined, 'Removed context is not re-added on refresh');
+  await frame.getByLabel('搜索图纸').fill('独立');
+  await page.waitForFunction(() => window.modelContext?.structuredContent?.query === '独立');
+  assert.equal(await page.evaluate(() => window.modelContext.content[0]._meta['openai/title']), 'Excalidraw 图纸库 · 1/2 张');
+  await frame.getByLabel('搜索图纸').fill('');
   await frame.getByLabel('搜索图纸').fill('不存在的图纸');
   await frame.getByText('没有匹配的图纸。').waitFor();
   await frame.getByRole('button', { name: '清除搜索' }).click();
   await frame.locator('.drawing img').first().waitFor();
+  // A drawing created from chat appears in the open list without pressing refresh.
+  await client.callTool({ name: 'create_drawing', arguments: { title: 'Agent 新建的图', scene: { elements: [{ id: 'agent-box', type: 'rectangle', x: 0, y: 0, width: 160, height: 90 }] } } });
+  await frame.getByRole('button', { name: /Agent 新建的图/ }).waitFor({ timeout: 9000 });
   await page.screenshot({ path: '.test-output/library-mobile.png' });
   await page.setViewportSize({ width: 1200, height: 950 });
   await page.screenshot({ path: '.test-output/library-desktop.png' });
   saved = (await client.callTool({ name: 'read_drawing', arguments: { id } })).structuredContent.document;
   assert.equal(saved.plugin.title, '浏览器实际编辑验证');
-  const revisionBeforePreview = saved.plugin.revision;
+  const revisionBeforeOpen = saved.plugin.revision;
+  const titleOf = async drawingId => (await client.callTool({ name: 'read_drawing', arguments: { id: drawingId } })).structuredContent.document.plugin;
+  const titleInput = frame.getByLabel('图纸名称', { exact: true });
 
-  // Conversation entry is a preview, never a library or live editor.
+  // A conversation card opens the drawing straight in the editor: no preview step, library or back button.
   await page.goto(`http://127.0.0.1:${http.address().port}/?drawing=${id}`);
-  await frame.getByRole('button', { name: '展开编辑', exact: true }).waitFor();
-  await frame.locator('.scene-preview img').waitFor();
+  await titleInput.waitFor({ timeout: 12000 });
+  await frame.locator('.excalidraw canvas.interactive').first().waitFor();
   assert.equal(await frame.getByLabel('图纸库', { exact: true }).count(), 0);
-  assert.equal(await frame.locator('.excalidraw').count(), 0);
-  await page.waitForTimeout(1600);
-  assert.equal((await client.callTool({ name: 'read_drawing', arguments: { id } })).structuredContent.document.plugin.revision, revisionBeforePreview, 'Opening preview never writes a revision');
-  await page.screenshot({ path: '.test-output/preview-desktop.png' });
+  assert.equal(await frame.getByRole('button', { name: '图纸列表', exact: true }).count(), 0);
+  assert.equal(await frame.locator('.scene-preview').count(), 0);
+  // Hand-drawn fonts load despite the CSP refusing data: fonts, and CJK has a system-font alias.
+  const fontState = await page.frames()[1].evaluate(async () => {
+    await document.fonts.ready;
+    return [...document.fonts].filter(f => ['Virgil', 'Excalifont', 'Segoe UI Emoji'].includes(f.family)).map(f => `${f.family}:${f.status}`);
+  });
+  assert.ok(fontState.includes('Virgil:loaded') && fontState.includes('Excalifont:loaded'), `Editor fonts load under strict CSP: ${fontState}`);
+  assert.ok(fontState.some(s => s.startsWith('Segoe UI Emoji:')), 'CJK fallback alias registered');
+  // Saved is the normal state: the header shows nothing until there is something to report.
+  assert.equal(await frame.locator('.status i').count(), 0, 'No visible saved indicator');
+  assert.equal(await frame.locator('.status .sr-only').innerText(), '已保存', 'Saved state is still announced');
+  // The open drawing is what the card reports to the model.
+  await page.waitForFunction(id => window.modelContext?.structuredContent?.view === 'editor' && window.modelContext.structuredContent.drawing.id === id, id);
+  // Excalidraw normalises a scene when it mounts; opening without editing must not write a revision.
+  await page.waitForTimeout(2600);
+  assert.equal((await titleOf(id)).revision, revisionBeforeOpen, 'Opening a drawing never writes a revision');
+  assert.equal(await frame.getByRole('button', { name: '保存', exact: true }).count(), 0, 'No save button while nothing is unsaved');
+  await page.screenshot({ path: '.test-output/card-desktop.png' });
   // A host delivering unrelated tool results must not retarget this card.
   const otherResult = await client.callTool({ name: 'read_drawing', arguments: { id: copy.id } });
   await page.evaluate(result => window.deliverResult(result), otherResult);
   await page.evaluate(() => window.deliverResult({ content: [], structuredContent: { view: 'library' } }));
   await page.waitForTimeout(250);
-  assert.equal(await frame.getByRole('heading', { name: '浏览器实际编辑验证', exact: true }).count(), 1);
-  await frame.getByRole('button', { name: '展开编辑', exact: true }).click();
-  await frame.getByLabel('图纸名称', { exact: true }).fill('对话编辑后的图纸');
-  assert.equal(await frame.getByRole('button', { name: '图纸列表', exact: true }).count(), 0);
-  await frame.getByRole('button', { name: '返回预览', exact: true }).click();
-  await frame.getByRole('heading', { name: '对话编辑后的图纸', exact: true }).waitFor();
+  assert.equal(await titleInput.inputValue(), '浏览器实际编辑验证');
+  // Edits in the card autosave to the same drawing; the copy is untouched.
+  await titleInput.fill('对话编辑后的图纸');
+  await until(async () => (await titleOf(id)).title === '对话编辑后的图纸');
+  assert.equal((await titleOf(copy.id)).title, '独立副本');
+  // An Agent save reaches the open editor while it has no unsaved edits, without switching drawings.
+  // It is applied in place: the user's zoom and scroll survive, and it is not treated as an unsaved edit.
+  const zoomLabel = frame.locator('.reset-zoom-button');
+  await frame.locator('.zoom-in-button').click();
+  await frame.locator('.zoom-in-button').click();
+  const zoomBefore = await zoomLabel.innerText();
+  assert.notEqual(zoomBefore, '100%');
   const afterEdit = (await client.callTool({ name: 'read_drawing', arguments: { id } })).structuredContent.document;
-  assert.equal(afterEdit.plugin.title, '对话编辑后的图纸');
-  assert.equal((await client.callTool({ name: 'read_drawing', arguments: { id: copy.id } })).structuredContent.document.plugin.title, '独立副本');
-  // Latest revision propagates to the same preview without a remount or ID switch.
-  await client.callTool({ name: 'save_drawing', arguments: { id, expectedRevision: afterEdit.plugin.revision, title: 'Agent 更新后的图纸', scene: { elements: afterEdit.elements, appState: afterEdit.appState, files: afterEdit.files } } });
-  await frame.getByRole('heading', { name: 'Agent 更新后的图纸', exact: true }).waitFor({ timeout: 9000 });
+  await client.callTool({ name: 'save_drawing', arguments: { id, expectedRevision: afterEdit.plugin.revision, title: 'Agent 更新后的图纸', scene: { elements: [...afterEdit.elements, { id: 'agent-added', type: 'ellipse', x: 60, y: 60, width: 80, height: 50 }], appState: afterEdit.appState, files: afterEdit.files } } });
+  await until(async () => (await titleInput.inputValue()) === 'Agent 更新后的图纸');
+  await page.waitForTimeout(1600);
+  assert.equal(await zoomLabel.innerText(), zoomBefore, 'Agent update keeps the viewport');
+  assert.equal(await frame.getByRole('button', { name: '保存', exact: true }).count(), 0, 'Agent update is not an unsaved edit');
+  const agentRevision = (await titleOf(id)).revision;
+  await page.waitForTimeout(1600);
+  assert.equal((await titleOf(id)).revision, agentRevision, 'Applying an agent update writes nothing back');
+  // Excalidraw hides zoom controls below 730px, so check the kept viewport on a desktop-width resize.
+  await page.setViewportSize({ width: 850, height: 950 });
+  await page.waitForTimeout(600);
+  assert.equal(await zoomLabel.innerText(), zoomBefore, 'A resize keeps a viewport the user has zoomed');
   await page.setViewportSize({ width: 375, height: 900 });
-  await frame.locator('.scene-preview img').waitFor();
-  await page.screenshot({ path: '.test-output/preview-mobile.png' });
+  await page.waitForTimeout(600);
+  await page.screenshot({ path: '.test-output/card-mobile.png' });
   assert.equal(await page.frames()[1].evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
   // Long mixed-language names still fit at narrow width.
-  await frame.getByRole('button', { name: '展开编辑', exact: true }).click();
-  await frame.getByLabel('图纸名称', { exact: true }).fill('Architecture系统设计'.repeat(8));
-  await frame.getByRole('button', { name: '返回预览', exact: true }).click();
-  await frame.getByRole('button', { name: '展开编辑', exact: true }).waitFor();
+  await titleInput.fill('Architecture系统设计'.repeat(8));
   assert.equal(await page.frames()[1].evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
-  await page.screenshot({ path: '.test-output/preview-long-title.png' });
-  // A stale edit stays in the editor; return cannot discard it silently.
-  await frame.getByRole('button', { name: '展开编辑', exact: true }).click();
+  await page.screenshot({ path: '.test-output/card-long-title.png' });
+  // A stale edit stays in the editor and can still be exported; reload asks before discarding it.
   await page.waitForTimeout(1600);
   const conflictBase = (await client.callTool({ name: 'read_drawing', arguments: { id } })).structuredContent.document;
-  await frame.getByLabel('图纸名称', { exact: true }).fill('尚未保存的冲突草稿');
+  await titleInput.fill('尚未保存的冲突草稿');
   await client.callTool({ name: 'patch_drawing', arguments: { id, expectedRevision: conflictBase.plugin.revision, upsert: [{ id: 'concurrent', type: 'rectangle', x: 700, y: 30, width: 100, height: 70 }] } });
   await frame.getByRole('button', { name: '保存', exact: true }).click();
   await frame.getByRole('alert').waitFor();
-  await frame.getByRole('button', { name: '返回预览', exact: true }).click();
-  assert.equal(await frame.getByLabel('图纸名称', { exact: true }).inputValue(), '尚未保存的冲突草稿');
+  assert.equal(await titleInput.inputValue(), '尚未保存的冲突草稿');
   const downloadWait = page.waitForEvent('download');
   await (await menuItem('导出')).click();
   assert.ok((await downloadWait).suggestedFilename().endsWith('.excalidraw'));
   page.once('dialog', dialog => dialog.accept());
   await (await menuItem('重新载入')).click();
   await page.waitForTimeout(500);
-  await frame.getByRole('button', { name: '返回预览', exact: true }).click();
-  await frame.getByRole('button', { name: '展开编辑', exact: true }).waitFor();
 
   // Use a deliberately composed fixture for visual QA, not overlapping paste-regression text.
   const elements = [];
@@ -183,23 +233,33 @@ try {
     elements.push({ id: `qa-label-${index}`, type: 'text', x: x + 35, y: 78, width: 100, height: 25, text: label, originalText: label, fontSize: 20, fontFamily: 2, textAlign: 'center', verticalAlign: 'top', lineHeight: 1.25 });
     if (index < 2) elements.push({ id: `qa-arrow-${index}`, type: 'arrow', x: x + 180, y: 90, width: 50, height: 0, points: [[0, 0], [50, 0]], endArrowhead: 'arrow', strokeWidth: 1 });
   }
+  // A drawing wider than the card opens fitted to the view instead of at 100%.
+  const wide = (await client.callTool({ name: 'create_drawing', arguments: { title: '很宽的图', scene: { elements: [0, 1, 2, 3].map(i => ({ id: `wide-${i}`, type: 'rectangle', x: i * 900, y: 0, width: 600, height: 300 })) } } })).structuredContent.document;
+  await page.setViewportSize({ width: 1200, height: 950 });
+  await page.goto(`http://127.0.0.1:${http.address().port}/?drawing=${wide.plugin.id}`);
+  await frame.locator('.excalidraw canvas.interactive').first().waitFor();
+  await page.waitForTimeout(600);
+  const fittedZoom = parseInt(await frame.locator('.reset-zoom-button').innerText(), 10);
+  assert.ok(fittedZoom < 100 && fittedZoom >= 10, `Wide drawing opens fitted, got ${fittedZoom}%`);
+  await page.screenshot({ path: '.test-output/fit-wide.png' });
+  // Untouched by the user, the view refits when the frame narrows a lot (e.g. a sidebar tab resize).
+  await page.setViewportSize({ width: 800, height: 950 });
+  await until(async () => parseInt(await frame.locator('.reset-zoom-button').innerText(), 10) < fittedZoom, 3000);
   const qa = (await client.callTool({ name: 'create_drawing', arguments: { title: '本地协作流程', scene: { elements } } })).structuredContent.document;
   await page.setViewportSize({ width: 1000, height: 950 });
   await page.goto(`http://127.0.0.1:${http.address().port}/?drawing=${qa.plugin.id}`);
-  await frame.locator('.scene-preview img').waitFor();
-  await page.screenshot({ path: '.test-output/qa-preview-desktop.png' });
-  await page.setViewportSize({ width: 375, height: 900 });
-  await page.screenshot({ path: '.test-output/qa-preview-mobile.png' });
-  await frame.getByRole('button', { name: '展开编辑', exact: true }).click();
   await frame.locator('.excalidraw canvas.interactive').first().waitFor();
   await page.waitForTimeout(600);
-  await page.screenshot({ path: '.test-output/qa-editor-mobile.png' });
+  await page.screenshot({ path: '.test-output/qa-card-desktop.png' });
+  await page.setViewportSize({ width: 375, height: 900 });
+  await page.waitForTimeout(600);
+  await page.screenshot({ path: '.test-output/qa-card-mobile.png' });
   await page.goto(`http://127.0.0.1:${http.address().port}`);
   await frame.locator('.drawing img').first().waitFor();
   await page.screenshot({ path: '.test-output/qa-library-mobile.png' });
   assert.deepEqual(errors, [], 'No uncaught browser errors');
   assert.deepEqual(external, [], 'No external network requests');
-  console.log('PASS: sandboxed official MCP App bridge, real Excalidraw pointer edit, autosave, Mermaid menu removal and Mermaid/plain-text paste, agent patch, reopen, 375px overflow, library thumbnails/search/copy, fixed-ID conversation preview/edit/return, live preview updates, no external requests');
+  console.log('PASS: sandboxed official MCP App bridge, real Excalidraw pointer edit, autosave, Mermaid menu removal and Mermaid/plain-text paste, agent patch, reopen, 375px overflow, library thumbnails/search/copy, fixed-ID conversation card opening straight in the editor without writing, card autosave, live agent updates, no external requests');
 } finally {
   await browser?.close(); await client.close(); if (http) await new Promise(resolve => http.close(resolve));
   await rm(dir, { recursive: true, force: true });

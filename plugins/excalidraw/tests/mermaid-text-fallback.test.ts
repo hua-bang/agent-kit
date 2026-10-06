@@ -9,7 +9,7 @@ describe('Mermaid-free clipboard compatibility', () => {
   ])('preserves source verbatim as editable text: %s', async source => {
     const result = await parseMermaidToExcalidraw(source);
     expect(result).toEqual({
-      elements: [{ type: 'text', text: source, x: 0, y: 0, fontFamily: 2 }],
+      elements: [{ type: 'text', text: source, x: 0, y: 0, fontFamily: 1 }],
       files: {},
     });
   });

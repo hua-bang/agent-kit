@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Excalidraw, MainMenu, restore, serializeAsJSON } from '@excalidraw/excalidraw';
+import { CaptureUpdateAction, Excalidraw, MainMenu, restore, serializeAsJSON } from '@excalidraw/excalidraw';
 import { applyDocumentTheme, type McpUiTheme } from '@modelcontextprotocol/ext-apps';
 import type { ExcalidrawImperativeAPI } from '@excalidraw/excalidraw/types';
 import { bridge, callTool } from './bridge';
@@ -13,18 +13,25 @@ export function App() {
   // Entry surface is assigned by the resource, never inferred from a session or viewport.
   const isLibrary = document.querySelector('meta[name="excalidraw-surface"]')?.getAttribute('content') === 'library';
   const boundId = useRef<string | null>(null);
-  const [editing, setEditing] = useState(isLibrary);
   const [limit, setLimit] = useState(20);
   const [refreshing, setRefreshing] = useState(false);
   const [notice, setNotice] = useState('');
-  const expandButton = useRef<HTMLButtonElement>(null);
-  const titleInput = useRef<HTMLInputElement>(null);
   const [connected, setConnected] = useState(false);
   const [doc, setDoc] = useState<Drawing | null>(null);
   const current = useRef<Drawing | null>(null);
   const draft = useRef<Scene | null>(null);
   const api = useRef<ExcalidrawImperativeAPI | null>(null);
   const dirty = useRef(false);
+  // Viewport: fit each newly opened drawing, and refit on large resizes only until
+  // the user pans or zooms (sidebar tabs are resized often; their view is theirs).
+  const lastFit = useRef(0);
+  const viewportMoved = useRef(false);
+  function fit(editor: ExcalidrawImperativeAPI) {
+    lastFit.current = Date.now(); viewportMoved.current = false;
+    fitContent(editor);
+  }
+  // Excalidraw normalises a scene when it mounts; that first change is not a user edit.
+  const baseline = useRef(true);
   const saving = useRef(false);
   const editCounter = useRef(0);
   const conflict = useRef(false);
@@ -38,14 +45,31 @@ export function App() {
   const [editorKey, setEditorKey] = useState(0);
   const mounted = useRef(true);
   const handlers = useRef({ receive: (_: Payload) => {} });
+  const sentContext = useRef<string | null>(null);
+  const dismissedContext = useRef<string | null>(null);
   const [theme, setTheme] = useState<McpUiTheme>(() => matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
   useEffect(() => applyDocumentTheme(theme), [theme]);
 
   function load(next: Drawing) {
+    // A newer revision of the open drawing (agent edit, reload) replaces the scene in
+    // place so zoom, scroll and the active tool stay put; only a different drawing remounts.
+    const editor = current.current?.plugin.id === next.plugin.id ? api.current : null;
     current.current = next; draft.current = sceneOf(next); dirty.current = false; conflict.current = false;
-    editCounter.current++; api.current = null;
-    setDoc(next); setTitle(next.plugin.title); setError(''); setStatus(`已保存 · r${next.plugin.revision}`);
-    setEditorKey(k => k + 1);
+    baseline.current = true;
+    editCounter.current++;
+    setDoc(next); setTitle(next.plugin.title); setError(''); setStatus('已保存');
+    if (editor) {
+      const scene = restore(sceneOf(next) as unknown as Parameters<typeof restore>[0], null, null);
+      editor.addFiles(Object.values(scene.files));
+      // Not undoable: Ctrl+Z must not silently revert someone else's saved change.
+      editor.updateScene({ elements: scene.elements, appState: { viewBackgroundColor: scene.appState.viewBackgroundColor }, captureUpdate: CaptureUpdateAction.NEVER });
+      // The editor's own copy of the new scene is the baseline; no mount-time change follows.
+      baseline.current = false;
+      draft.current = sceneSchema.parse({ elements: editor.getSceneElementsIncludingDeleted(), appState: editor.getAppState(), files: editor.getFiles() });
+    } else {
+      api.current = null;
+      setEditorKey(k => k + 1);
+    }
   }
   handlers.current.receive = payload => {
     if (payload.document) {
@@ -68,6 +92,8 @@ export function App() {
     bridge.onhostcontextchanged = context => {
       if (context.theme) setTheme(context.theme);
       if (context.containerDimensions || context.displayMode) applyFill();
+      // OpenAI hosts clear this when the user removes the context attachment.
+      if ((context as Record<string, unknown>)['openai/modelContext'] === null) dismissedContext.current = sentContext.current;
     };
     bridge.connect().then(() => {
       if (!mounted.current) return;
@@ -87,11 +113,31 @@ export function App() {
       if (Math.abs(window.innerWidth - previousWidth) < 100) return;
       previousWidth = window.innerWidth;
       clearTimeout(timer);
-      timer = setTimeout(() => api.current?.scrollToContent(undefined, { fitToViewport: true }), 150);
+      timer = setTimeout(() => { if (api.current && !viewportMoved.current) fit(api.current); }, 150);
     };
     window.addEventListener('resize', resize);
     return () => { window.removeEventListener('resize', resize); clearTimeout(timer); };
   }, []);
+  // Keep the list current while it is on screen (agents create and edit drawings from chat).
+  // Silent: no spinner or disabled cards, and state only changes when something did.
+  useEffect(() => {
+    if (!connected || !isLibrary || doc) return;
+    let polling = false;
+    const poll = async () => {
+      if (polling || document.visibilityState !== 'visible') return;
+      polling = true;
+      try {
+        const next = await callTool<Library>('list_drawings');
+        if (mounted.current) setLibrary(previous => previous && librarySignature(previous) === librarySignature(next) ? previous : next);
+      } catch { /* The manual refresh button reports errors. */ }
+      finally { polling = false; }
+    };
+    const onVisible = () => { if (document.visibilityState === 'visible') void poll(); };
+    const timer = setInterval(() => void poll(), 5000);
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', onVisible);
+    return () => { clearInterval(timer); document.removeEventListener('visibilitychange', onVisible); window.removeEventListener('focus', onVisible); };
+  }, [connected, doc]);
   async function refreshLibrary() {
     setRefreshing(true);
     try { const data = await callTool<Library>('list_drawings'); if (mounted.current) setLibrary(data); }
@@ -110,7 +156,7 @@ export function App() {
       current.current = result.document;
       setDoc(result.document);
       dirty.current = generation !== editCounter.current;
-      setStatus(dirty.current ? '有未保存修改' : `已保存 · r${result.document.plugin.revision}`);
+      setStatus(dirty.current ? '有未保存修改' : '已保存');
       setError('');
     } catch (e) {
       conflict.current = true; // Stop retry storms. Keep the unsaved draft available for export.
@@ -143,6 +189,21 @@ export function App() {
     window.addEventListener('beforeunload', beforeUnload);
     return () => window.removeEventListener('beforeunload', beforeUnload);
   }, []);
+  // Tool calls made by this view never reach the model on their own. Report what
+  // is on screen so the user can refer to "this list" or "this drawing" in chat.
+  // Each update replaces the previous one; hosts without support are skipped.
+  // If the user removes the attachment, stay quiet until they move to another view.
+  useEffect(() => {
+    if (!connected || !bridge.getHostCapabilities()?.updateModelContext?.text) return;
+    const timer = setTimeout(() => {
+      const context = describeView(isLibrary, doc, library, query);
+      if (!context || context.key === dismissedContext.current) return;
+      dismissedContext.current = null;
+      sentContext.current = context.key;
+      void bridge.updateModelContext(context.params).catch(() => {});
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [connected, doc?.plugin.id, doc?.plugin.revision, doc?.plugin.title, library, query]);
 
   async function action(work: () => Promise<void>) {
     setBusy(true); setError('');
@@ -163,30 +224,23 @@ export function App() {
     if (dirty.current || saving.current) throw new Error('请先保存修改，或导出草稿后重新载入。');
     api.current = null;
     setNotice(''); // Notices describe the editor session; do not carry them back to the list.
-    if (isLibrary) {
-      current.current = null; setDoc(null); setLibrary(null); await refreshLibrary();
-    } else {
-      setEditing(false);
-      requestAnimationFrame(() => expandButton.current?.focus());
-    }
-  }
-  function expand() {
-    setEditing(true);
-    requestAnimationFrame(() => titleInput.current?.focus());
+    current.current = null; setDoc(null); setLibrary(null); await refreshLibrary();
   }
   const matches = library?.drawings.filter(d => d.title.toLocaleLowerCase().includes(query.toLocaleLowerCase())) ?? [];
   const tone = /暂停|未连接|失败/.test(status) ? 'error' : /正在保存|未保存/.test(status) ? 'pending' : /已保存/.test(status) ? 'ok' : 'idle';
-  const statusPill = <span className={`status tone-${tone}`} role="status" aria-live="polite"><i aria-hidden="true" />{status}</span>;
+  // Autosave makes "saved" the normal state: announce it to screen readers, show only the exceptions.
+  const statusPill = <span className={`status tone-${tone}`} role="status" aria-live="polite">{tone === 'ok' ? <span className="sr-only">{status}</span> : <><i aria-hidden="true" />{status}</>}</span>;
   const messages = <>
     {error && <div className="banner error" role="alert"><span>{error}</span>{!doc && connected && isLibrary && <button className="tool" onClick={() => void refreshLibrary()}>重试</button>}</div>}
     {notice && <div className="banner notice" role="status">{notice}</div>}
   </>;
-  return <main className={`app ${isLibrary ? 'library-surface' : 'drawing-surface'} ${doc && editing ? 'is-editing' : ''}`}>
+  // A drawing always opens in the editor: the library enters it from the list, a conversation card shows it directly.
+  return <main className={`app ${isLibrary ? 'library-surface' : 'drawing-surface'} ${doc ? 'is-editing' : ''}`}>
     <a className="skip-link" href="#main-content">跳到图纸内容</a>
-    {doc && editing ? <>
+    {doc ? <>
       <header className="editor-bar">
-        <button className="ghost back" disabled={busy} onClick={() => void action(leaveEditor)}><IconBack />{isLibrary ? '图纸列表' : '返回预览'}</button>
-        <input ref={titleInput} aria-label="图纸名称" className="title" value={title} maxLength={160} onChange={e => { setTitle(e.target.value); changed(); }} />
+        {isLibrary && <button className="ghost back" disabled={busy} onClick={() => void action(leaveEditor)}><IconBack />图纸列表</button>}
+        <input aria-label="图纸名称" className="title" value={title} maxLength={160} onChange={e => { setTitle(e.target.value); changed(); }} />
         {statusPill}
         {/* Autosave covers the normal case; the button only appears while work is unsaved or paused. */}
         {(tone === 'pending' || tone === 'error') && <button className="tool save" disabled={busy} onClick={() => { conflict.current = false; void save(); }}>保存</button>}
@@ -194,14 +248,22 @@ export function App() {
       {messages}
       <section id="main-content" className="editor" aria-label="Excalidraw 编辑器">
       <Excalidraw key={editorKey}
-        excalidrawAPI={value => { api.current = value; }}
-        initialData={{ ...restore({ ...sceneOf(doc), appState: { ...doc.appState, currentItemFontFamily: 2 } } as unknown as Parameters<typeof restore>[0], null, null), scrollToContent: true }}
+        excalidrawAPI={value => {
+          api.current = value;
+          // Open each drawing fitted to the visible area (after layout has sized the canvas).
+          requestAnimationFrame(() => requestAnimationFrame(() => { if (api.current === value) fit(value); }));
+        }}
+        // New shapes and text default to the hand-drawn style: sketchy lines and Virgil
+        // (the face this build actually renders, so drawings look the same in Excalidraw).
+        initialData={{ ...restore({ ...sceneOf(doc), appState: { ...doc.appState, currentItemFontFamily: 1, currentItemRoughness: 1 } } as unknown as Parameters<typeof restore>[0], null, null) }}
         langCode="zh-CN" autoFocus={false} aiEnabled={false} theme={theme}
+        onScrollChange={() => { if (Date.now() - lastFit.current > 500) viewportMoved.current = true; }}
         onLinkOpen={(_element, event) => event.preventDefault()}
         UIOptions={{ canvasActions: { loadScene: false, saveToActiveFile: false, export: false, saveAsImage: false, toggleTheme: false }, tools: { image: true } }}
         onChange={(elements, appState, files) => {
           try {
             const scene = sceneSchema.parse({ elements, appState, files });
+            if (baseline.current) { baseline.current = false; draft.current = scene; return; }
             if (JSON.stringify(scene) !== JSON.stringify(draft.current)) {
               draft.current = scene; changed();
             }
@@ -226,20 +288,6 @@ export function App() {
           <MainMenu.DefaultItems.ChangeCanvasBackground />
         </MainMenu>
       </Excalidraw>
-      </section>
-    </> : doc ? <>
-      {messages}
-      <section id="main-content" className="card" aria-label="图纸预览">
-        <button className="preview-open" onClick={expand} aria-label={`展开编辑 ${doc.plugin.title}`}>
-          <Preview document={doc} dark={theme === 'dark'} />
-        </button>
-        <div className="card-bar">
-          <div className="heading">
-            <h1>{doc.plugin.title}</h1>
-            <span className="meta">更新于 {relativeTime(doc.plugin.updatedAt)}</span>
-          </div>
-          <button ref={expandButton} className="primary" onClick={expand}>展开编辑</button>
-        </div>
       </section>
     </> : isLibrary ? <>
       <header className="library-head">
@@ -278,6 +326,52 @@ export function App() {
       <span>{connected ? '等待图纸，请让 Agent 打开或新建一张图。' : '连接 MCP 宿主中'}</span>
     </section>}
   </main>;
+}
+
+/**
+ * Text plus structured data describing the current view, for ui/update-model-context.
+ * `key` identifies the view (not its contents) so a removed attachment stays removed until it changes.
+ * `openai/title` labels the composer attachment on OpenAI hosts; other hosts ignore it.
+ */
+function describeView(isLibrary: boolean, doc: Drawing | null, library: Library | null, query: string) {
+  const block = (title: string, text: string) => ({ type: 'text' as const, text, _meta: { 'openai/title': title } });
+  const drawing = (d: DrawingSummary) => ({ id: d.id, title: d.title, revision: d.revision, updatedAt: d.updatedAt });
+  if (doc) {
+    const view = 'editor';
+    const text = `The user has the local Excalidraw drawing "${doc.plugin.title}" open in the editor `
+      + `(id ${doc.plugin.id}, revision ${doc.plugin.revision}, ${doc.elements.filter(e => !e.isDeleted).length} elements). `
+      + 'Call read_drawing with this id for its latest content before describing or changing it; use patch_drawing with the latest revision to edit.'
+      + ' The editor autosaves about every 1.2 seconds.';
+    return { key: `${view}:${doc.plugin.id}`, params: {
+      content: [block(`Excalidraw · ${doc.plugin.title}`, text)],
+      structuredContent: { app: 'local-excalidraw', view, drawing: drawing(doc.plugin) },
+    } };
+  }
+  if (!isLibrary || !library) return null;
+  const needle = query.toLocaleLowerCase();
+  const shown = library.drawings.filter(d => d.title.toLocaleLowerCase().includes(needle));
+  const listed = shown.slice(0, 50);
+  const text = [
+    `The user is viewing the local Excalidraw drawing library: ${library.drawings.length} drawing(s)`
+      + (query ? `, filtered by "${query}" to ${shown.length}` : '') + ', most recently updated first.',
+    ...listed.map(d => `- "${d.title}" (id ${d.id}, revision ${d.revision}, updated ${d.updatedAt})`),
+    ...(shown.length > listed.length ? [`- …and ${shown.length - listed.length} more; call list_drawings for all.`] : []),
+    'Call read_drawing with an id to see a drawing\'s content.',
+  ].join('\n');
+  return { key: `library:${query}`, params: {
+    content: [block(`Excalidraw 图纸库 · ${query ? `${shown.length}/` : ''}${library.drawings.length} 张`, text)],
+    structuredContent: { app: 'local-excalidraw', view: 'library', query, total: library.drawings.length, drawings: listed.map(drawing) },
+  } };
+}
+
+function librarySignature(library: Library) {
+  return JSON.stringify([library.warnings.length, library.drawings.map(d => [d.id, d.revision, d.title])]);
+}
+
+/** Fit the whole drawing into view, leaving a margin; never zoom small drawings past 100%. */
+function fitContent(editor: ExcalidrawImperativeAPI) {
+  if (!editor.getSceneElements().length) return;
+  editor.scrollToContent(undefined, { fitToViewport: true, viewportZoomFactor: 0.9, maxZoom: 1 });
 }
 
 /** A host-fixed height (sidebar, fullscreen) means the editor should fit it, not grow past it. */

@@ -1,11 +1,15 @@
 import { AppBridge, PostMessageTransport } from '@modelcontextprotocol/ext-apps/app-bridge';
 const iframe = document.querySelector('iframe')!;
 const id = new URLSearchParams(location.search).get('drawing');
-const bridge = new AppBridge(null, { name: 'local-test-host', version: '1' }, { serverTools: {} }, {
+const bridge = new AppBridge(null, { name: 'local-test-host', version: '1' }, { serverTools: {}, updateModelContext: { text: {} } }, {
   hostContext: { theme: 'light', displayMode: 'inline', availableDisplayModes: ['inline'], locale: 'zh-CN' },
 });
 const call = async (name: string, args = {}) => (await fetch('/tool', { method: 'POST', body: JSON.stringify({ name, arguments: args }) })).json();
 bridge.oncalltool = params => call(params.name, params.arguments);
+// Record what the view reports to the model, so the smoke test can assert on it.
+bridge.onupdatemodelcontext = async params => { Object.assign(window, { modelContext: params }); return {}; };
+// What an OpenAI host sends when the user removes the context attachment.
+Object.assign(window, { removeModelContext: () => bridge.sendHostContextChange({ 'openai/modelContext': null } as never) });
 bridge.oninitialized = async () => {
   await bridge.sendToolInput({ arguments: id ? { id } : {} });
   await bridge.sendToolResult(await call(id ? 'open_drawing' : 'open_library', id ? { id } : {}));
