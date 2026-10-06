@@ -120,7 +120,7 @@ npm run test:stdio
 在任意对话中，可通过输入框 `@` 搜索并引用图纸（OpenAI MCP 扩展 `mentions/search`，由 `mention_drawings` 提供，模型不可直接调用）。引用以 `excalidraw://drawings/<id>` 资源链接附上；该资源返回完整图纸 JSON，所有图纸也列在 `resources/list` 中。`@` 选择器由宿主提供，本地测试只覆盖搜索结果与资源读取。
 
 打开图纸但不修改不会创建修订（Excalidraw 加载时的规范化不算修改）。有修改时界面约每 1.2 秒保存；无未保存改动时每 5 秒检查远端修订，Agent 的修改会同步进已打开的编辑器。
-编辑器页头只保留标题和保存状态（图纸库里另有返回列表按钮）；有未保存修改或自动保存暂停时才出现“保存”按钮。冲突或错误会暂停自动保存，保留编辑器草稿，用户可以从菜单导出草稿或明确放弃后重新载入。不会静默覆盖。
+编辑器页头只保留标题（图纸库里另有返回列表按钮）；已保存是常态，不显示，只有保存中、有未保存修改或保存暂停时才显示状态；有未保存修改或自动保存暂停时才出现“保存”按钮。冲突或错误会暂停自动保存，保留编辑器草稿，用户可以从菜单导出草稿或明确放弃后重新载入。不会静默覆盖。
 编辑器菜单（☰）里的“导出”下载标准 `.excalidraw` 文件，需要宿主允许 iframe 下载。关闭宿主可能不触发浏览器退出提示，请先确认“已保存”。
 
 ## 本地存储
@@ -144,6 +144,8 @@ npm run test:stdio
 一个独立 TypeScript 包；React 18.3 + Excalidraw 0.18.1、MCP SDK 1.32 + MCP Apps 1.7.5、Vite、普通 CSS。使用 MCP Apps v1 与 MCP SDK v1 配对，未混入 SDK v2。
 
 真实编辑器本身有体积成本：自包含 HTML 约 5.23 MB（准确字节数以构建输出为准），相比原始 9.01 MB 减少约 42%。JS/CSS 和字体在本地构建时内联，不从 CDN 加载。只打包许可已核实的字体：Excalifont、Cascadia Code、Liberation 分别以 Virgil、Comic Shanns、Assistant 渲染，Xiaolai（约 12 MiB）以 Assistant 加系统中文字体代替，详见 [字体许可](licenses/FONTS.md)。图纸文件中的字体设置不变，仅本插件内显示字形不同；字体原文件未被修改。
+
+MCP Apps 宿主在 `resourceDomains` 为空时通常不放行 `font-src`，`data:` 字体会被拒绝，手写字体退回衬线体。界面在 Excalidraw 创建字体前把内联字体解码为 `ArrayBuffer` 再交给 `FontFace`，不产生可被 CSP 拦截的请求（`src/app/fonts.ts`）；浏览器测试用不含 `font-src` 的 CSP 覆盖这一点。Excalidraw 只给 Excalifont 配了中文回退，其余字体的中文会落到浏览器默认字体（常为宋体），因此为其共同的最后回退 `Segoe UI Emoji` 注册了仅限 CJK 码位的系统中文字体别名：优先手写风格的 Xiaolai SC / 霞鹜文楷（若已安装），其次苹方、冬青黑体、微软雅黑、思源/Noto Sans CJK、文泉驿。Excalidraw 自身界面的 Assistant 字体由其 CSS 引用，在严格 CSP 下回退为系统字体，不影响画布。
 
 Mermaid 转换库及其 Mermaid/Cytoscape/KaTeX 依赖图不进入 UI 构建；粘贴 Mermaid 源码会保留为可编辑文本，不转换为图形。Agent 仍直接生成或修改 Excalidraw 元素。保留全部现有语言包与字体子集化能力。
 

@@ -46,7 +46,7 @@ export function App() {
     current.current = next; draft.current = sceneOf(next); dirty.current = false; conflict.current = false;
     baseline.current = true;
     editCounter.current++; api.current = null;
-    setDoc(next); setTitle(next.plugin.title); setError(''); setStatus(`已保存 · r${next.plugin.revision}`);
+    setDoc(next); setTitle(next.plugin.title); setError(''); setStatus('已保存');
     setEditorKey(k => k + 1);
   }
   handlers.current.receive = payload => {
@@ -114,7 +114,7 @@ export function App() {
       current.current = result.document;
       setDoc(result.document);
       dirty.current = generation !== editCounter.current;
-      setStatus(dirty.current ? '有未保存修改' : `已保存 · r${result.document.plugin.revision}`);
+      setStatus(dirty.current ? '有未保存修改' : '已保存');
       setError('');
     } catch (e) {
       conflict.current = true; // Stop retry storms. Keep the unsaved draft available for export.
@@ -186,7 +186,8 @@ export function App() {
   }
   const matches = library?.drawings.filter(d => d.title.toLocaleLowerCase().includes(query.toLocaleLowerCase())) ?? [];
   const tone = /暂停|未连接|失败/.test(status) ? 'error' : /正在保存|未保存/.test(status) ? 'pending' : /已保存/.test(status) ? 'ok' : 'idle';
-  const statusPill = <span className={`status tone-${tone}`} role="status" aria-live="polite"><i aria-hidden="true" />{status}</span>;
+  // Autosave makes "saved" the normal state: announce it to screen readers, show only the exceptions.
+  const statusPill = <span className={`status tone-${tone}`} role="status" aria-live="polite">{tone === 'ok' ? <span className="sr-only">{status}</span> : <><i aria-hidden="true" />{status}</>}</span>;
   const messages = <>
     {error && <div className="banner error" role="alert"><span>{error}</span>{!doc && connected && isLibrary && <button className="tool" onClick={() => void refreshLibrary()}>重试</button>}</div>}
     {notice && <div className="banner notice" role="status">{notice}</div>}

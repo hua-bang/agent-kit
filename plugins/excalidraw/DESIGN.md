@@ -29,7 +29,7 @@ System stack with PingFang SC / YaHei fallback, no added web fonts (Excalifont o
 - Buttons: 8px radius, 36px high (32px in the editor bar). `tool` buttons use Excalidraw's gray fill and get a primary border while pressed; the primary button is violet with bold text; `ghost` is only for "back". Icons appear only on back, search, refresh and create; they are local inline SVG with `aria-hidden`, and the icon-only refresh button carries an `aria-label`.
 - Inputs: 36px, 1px `--line` border on the island colour; focus shows a 1px primary border plus a 1px primary ring.
 - Count: a violet-tinted badge beside the library heading; while searching it reads `matches / total`.
-- Save state: an 8px coloured dot plus label.
+- Save state: hidden while saved (autosave makes that the normal state; it is still announced to screen readers). Saving, unsaved and paused states show an 8px coloured dot plus label. No revision numbers in the UI.
 - Library cards: island panels with the island shadow and an 8px radius, 16:10 thumbnail on the canvas colour rendered lazily by the SDK as a `data:` PNG (host CSPs commonly allow `data:` but not `blob:` images), title and relative time. Hover outlines the card in primary.
 - Thumbnail failures never prevent opening the editor.
 

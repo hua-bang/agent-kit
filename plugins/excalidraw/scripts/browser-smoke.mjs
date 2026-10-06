@@ -24,7 +24,8 @@ try {
       if (req.url === '/host.js') { res.setHeader('Content-Type', 'text/javascript'); res.end(hostScript); }
       else if (req.url.startsWith('/app?')) {
         res.setHeader('Content-Type', 'text/html');
-        res.setHeader('Content-Security-Policy', "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; font-src data:; img-src data:; connect-src 'none'; worker-src blob:");
+        // Like an MCP Apps host with no resourceDomains: no font-src at all, so data: fonts are refused.
+        res.setHeader('Content-Security-Policy', "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; connect-src 'none'; worker-src blob:");
         res.end(resources[new URL(req.url, 'http://localhost').searchParams.get('surface')]);
       } else if (req.url === '/tool') {
         let body = ''; for await (const chunk of req) body += chunk;
@@ -149,6 +150,16 @@ try {
   assert.equal(await frame.getByLabel('图纸库', { exact: true }).count(), 0);
   assert.equal(await frame.getByRole('button', { name: '图纸列表', exact: true }).count(), 0);
   assert.equal(await frame.locator('.scene-preview').count(), 0);
+  // Hand-drawn fonts load despite the CSP refusing data: fonts, and CJK has a system-font alias.
+  const fontState = await page.frames()[1].evaluate(async () => {
+    await document.fonts.ready;
+    return [...document.fonts].filter(f => ['Virgil', 'Excalifont', 'Segoe UI Emoji'].includes(f.family)).map(f => `${f.family}:${f.status}`);
+  });
+  assert.ok(fontState.includes('Virgil:loaded') && fontState.includes('Excalifont:loaded'), `Editor fonts load under strict CSP: ${fontState}`);
+  assert.ok(fontState.some(s => s.startsWith('Segoe UI Emoji:')), 'CJK fallback alias registered');
+  // Saved is the normal state: the header shows nothing until there is something to report.
+  assert.equal(await frame.locator('.status i').count(), 0, 'No visible saved indicator');
+  assert.equal(await frame.locator('.status .sr-only').innerText(), '已保存', 'Saved state is still announced');
   // The open drawing is what the card reports to the model.
   await page.waitForFunction(id => window.modelContext?.structuredContent?.view === 'editor' && window.modelContext.structuredContent.drawing.id === id, id);
   // Excalidraw normalises a scene when it mounts; opening without editing must not write a revision.
