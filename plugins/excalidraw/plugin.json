@@ -2,6 +2,6 @@
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "excalidraw",
   "version": "0.1.0",
-  "description": "Local-first Excalidraw drawings with a bundled skill, stdio MCP server and interactive MCP App. Install the prebuilt `release` branch, or build from source before installing.",
+  "description": "Agentic Excalidraw: an unofficial, local-first plugin for users and agents to edit drawings together, with a bundled skill, stdio MCP server and interactive MCP App. Not affiliated with or endorsed by the Excalidraw team. Install the prebuilt release branch, or build from source.",
   "keywords": ["excalidraw", "diagram", "local-first", "mcp-app"]
 }
