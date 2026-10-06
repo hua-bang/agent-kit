@@ -87,6 +87,8 @@ try {
     saved = (await client.callTool({ name: 'read_drawing', arguments: { id } })).structuredContent.document;
     const pasted = saved.elements.filter(e => e.type === 'text' && !e.isDeleted).map(e => e.text).join('\n');
     assert.ok(pasted.includes(text), `Pasted source is preserved as editable text: ${text}`);
+    // New text defaults to the hand-drawn Virgil face.
+    assert.ok(saved.elements.filter(e => e.type === 'text' && !e.isDeleted).every(e => e.fontFamily === 1), 'New text is hand-drawn (Virgil)');
   }
   await client.callTool({ name: 'patch_drawing', arguments: { id, expectedRevision: saved.plugin.revision, upsert: [{ id: 'agent-box', type: 'ellipse', x: original.x + 300, y: original.y, width: 120, height: 90 }] } });
   await page.waitForTimeout(6500);
@@ -224,6 +226,15 @@ try {
     elements.push({ id: `qa-label-${index}`, type: 'text', x: x + 35, y: 78, width: 100, height: 25, text: label, originalText: label, fontSize: 20, fontFamily: 2, textAlign: 'center', verticalAlign: 'top', lineHeight: 1.25 });
     if (index < 2) elements.push({ id: `qa-arrow-${index}`, type: 'arrow', x: x + 180, y: 90, width: 50, height: 0, points: [[0, 0], [50, 0]], endArrowhead: 'arrow', strokeWidth: 1 });
   }
+  // A drawing wider than the card opens fitted to the view instead of at 100%.
+  const wide = (await client.callTool({ name: 'create_drawing', arguments: { title: '很宽的图', scene: { elements: [0, 1, 2, 3].map(i => ({ id: `wide-${i}`, type: 'rectangle', x: i * 900, y: 0, width: 600, height: 300 })) } } })).structuredContent.document;
+  await page.setViewportSize({ width: 1000, height: 950 });
+  await page.goto(`http://127.0.0.1:${http.address().port}/?drawing=${wide.plugin.id}`);
+  await frame.locator('.excalidraw canvas.interactive').first().waitFor();
+  await page.waitForTimeout(600);
+  const fittedZoom = parseInt(await frame.locator('.reset-zoom-button').innerText(), 10);
+  assert.ok(fittedZoom < 100 && fittedZoom >= 10, `Wide drawing opens fitted, got ${fittedZoom}%`);
+  await page.screenshot({ path: '.test-output/fit-wide.png' });
   const qa = (await client.callTool({ name: 'create_drawing', arguments: { title: '本地协作流程', scene: { elements } } })).structuredContent.document;
   await page.setViewportSize({ width: 1000, height: 950 });
   await page.goto(`http://127.0.0.1:${http.address().port}/?drawing=${qa.plugin.id}`);

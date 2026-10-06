@@ -105,7 +105,7 @@ export function App() {
       if (Math.abs(window.innerWidth - previousWidth) < 100) return;
       previousWidth = window.innerWidth;
       clearTimeout(timer);
-      timer = setTimeout(() => api.current?.scrollToContent(undefined, { fitToViewport: true }), 150);
+      timer = setTimeout(() => { if (api.current) fitContent(api.current); }, 150);
     };
     window.addEventListener('resize', resize);
     return () => { window.removeEventListener('resize', resize); clearTimeout(timer); };
@@ -220,8 +220,14 @@ export function App() {
       {messages}
       <section id="main-content" className="editor" aria-label="Excalidraw 编辑器">
       <Excalidraw key={editorKey}
-        excalidrawAPI={value => { api.current = value; }}
-        initialData={{ ...restore({ ...sceneOf(doc), appState: { ...doc.appState, currentItemFontFamily: 2 } } as unknown as Parameters<typeof restore>[0], null, null), scrollToContent: true }}
+        excalidrawAPI={value => {
+          api.current = value;
+          // Open each drawing fitted to the visible area (after layout has sized the canvas).
+          requestAnimationFrame(() => requestAnimationFrame(() => { if (api.current === value) fitContent(value); }));
+        }}
+        // New shapes and text default to the hand-drawn style: sketchy lines and Virgil
+        // (the face this build actually renders, so drawings look the same in Excalidraw).
+        initialData={{ ...restore({ ...sceneOf(doc), appState: { ...doc.appState, currentItemFontFamily: 1, currentItemRoughness: 1 } } as unknown as Parameters<typeof restore>[0], null, null) }}
         langCode="zh-CN" autoFocus={false} aiEnabled={false} theme={theme}
         onLinkOpen={(_element, event) => event.preventDefault()}
         UIOptions={{ canvasActions: { loadScene: false, saveToActiveFile: false, export: false, saveAsImage: false, toggleTheme: false }, tools: { image: true } }}
@@ -327,6 +333,12 @@ function describeView(isLibrary: boolean, doc: Drawing | null, library: Library 
     content: [block(`Excalidraw 图纸库 · ${query ? `${shown.length}/` : ''}${library.drawings.length} 张`, text)],
     structuredContent: { app: 'local-excalidraw', view: 'library', query, total: library.drawings.length, drawings: listed.map(drawing) },
   } };
+}
+
+/** Fit the whole drawing into view, leaving a margin; never zoom small drawings past 100%. */
+function fitContent(editor: ExcalidrawImperativeAPI) {
+  if (!editor.getSceneElements().length) return;
+  editor.scrollToContent(undefined, { fitToViewport: true, viewportZoomFactor: 0.9, maxZoom: 1 });
 }
 
 /** A host-fixed height (sidebar, fullscreen) means the editor should fit it, not grow past it. */
