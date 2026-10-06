@@ -8,7 +8,7 @@
 已实现并通过本地测试：固定 ID 的对话图纸预览/展开编辑/返回，独立图纸库入口、真实缩略图/搜索/新建/复制，手动绘图、自动保存、重新打开、Agent 增量修改、修订冲突保护、五版备份、嵌入图片存储。视觉与交互约束见 [DESIGN.md](DESIGN.md)。
 
 实际浏览器测试通过官方 MCP Apps AppBridge 连接真实 stdio Server，运行真实 Excalidraw SDK，并用鼠标绘制图形；这**不等于已通过 ChatGPT、Claude 或其他生产宿主的安装与兼容性验收**。
-Sidebar 扩展元数据是关闭的实验功能，尚未通过真实 OpenAI 宿主验证。
+侧边栏（Global）入口默认开启，尚未在真实 OpenAI 宿主中验收。
 
 ## Agent Plugins 包与 Codex 本地安装
 
@@ -107,18 +107,20 @@ npm run test:stdio
 ## 使用
 
 - `open_library`：独立图纸库资源，面向 Sidebar，支持缩略图、搜索、新建、复制与进入详情。宿主不支持 Sidebar 时，显式调用此工具可能把图纸库放在对话中；插件不能强制宿主布局。
-- `create_drawing`：创建一张图，打开固定 ID 的预览。
-- `open_drawing`：在对话内展示指定图纸预览，点击「展开编辑」进入真实编辑器，保存后返回同一张图。卡片中没有图纸列表或切换图纸入口。
+- `create_drawing`：创建一张图，在对话中以固定 ID 的编辑器卡片打开。
+- `open_drawing`：在对话内直接以编辑器打开指定图纸（不区分预览态和编辑态），修改自动保存到同一张图。卡片中没有图纸列表或切换图纸入口。
 - `list_drawings` / `read_drawing`：只读取，不打开 UI。
 - `patch_drawing`：按稳定元素 ID 增量 upsert/remove，保留未修改元素与图片。
 - `save_drawing`：保存完整场景，必须携带最新 `expectedRevision`。
 
 图纸身份是永久 UUID，不是会话 ID 或 MCP 连接 ID。卡片绑定首次收到的图纸 ID，忽略其他图纸结果与旧修订；同 ID 默认展示最新内容。未建立宿主会话数据库，Agent 通过上下文显式传递 ID。图纸库编辑器左上角菜单（☰）里的「复制为新图」生成独立 UUID，原图与旧卡片不改变。
 
-界面自己调用工具（加载列表、读图）的结果不会自动进入 AI 上下文。宿主声明支持 `ui/update-model-context` 时，界面会把当前视图告诉模型：图纸库中可见图纸的名称、ID、修订号，或正在预览/编辑的图纸 ID 与修订号；每次更新覆盖上一次，不触发回复。宿主不支持时，随包 skill 会让 Agent 先调用 `list_drawings` / `read_drawing`。上下文属于该界面所在的对话，另开的对话线程不一定能看到。
+界面自己调用工具（加载列表、读图）的结果不会自动进入 AI 上下文。宿主声明支持 `ui/update-model-context` 时，界面会把当前视图告诉模型：图纸库中可见图纸的名称、ID、修订号，或正在编辑的图纸 ID 与修订号；每次更新覆盖上一次，不触发回复。宿主不支持时，随包 skill 会让 Agent 先调用 `list_drawings` / `read_drawing`。上下文属于该界面所在的对话，另开的对话线程不一定能看到。在 OpenAI 桌面端，上下文显示为输入框里可移除的附件（带「Excalidraw 图纸库 · N 张」或「Excalidraw · 图名」标题）；用户移除后，在切换到其他视图或搜索前不会重新附加。
 
-仅浏览预览不创建修订。展开编辑后，界面约每 1.2 秒保存脏场景；无未保存改动时每 5 秒检查远端修订。
-编辑器页头只保留返回、标题和保存状态；有未保存修改或自动保存暂停时才出现“保存”按钮。冲突或错误会暂停自动保存，保留编辑器草稿，用户可以从菜单导出草稿或明确放弃后重新载入。不会静默覆盖。
+在任意对话中，可通过输入框 `@` 搜索并引用图纸（OpenAI MCP 扩展 `mentions/search`，由 `mention_drawings` 提供，模型不可直接调用）。引用以 `excalidraw://drawings/<id>` 资源链接附上；该资源返回完整图纸 JSON，所有图纸也列在 `resources/list` 中。`@` 选择器由宿主提供，本地测试只覆盖搜索结果与资源读取。
+
+打开图纸时整张图自动适配可见区域（大图缩小，小图不超过 100%）；窗口大幅变宽变窄时，若用户还没缩放或拖动过画布就重新适配，否则保持用户的视角。图纸库列表可见时每 5 秒、以及切回页面时静默检查一次，有新增、改名或新版本才更新，Agent 在对话中新建的图无需手动刷新。新画的图形和文字默认手绘风格（手绘线条、Virgil 字体），Agent 生成图时也按此默认。打开图纸但不修改不会创建修订（Excalidraw 加载时的规范化不算修改）。有修改时界面约每 1.2 秒保存；无未保存改动时每 5 秒检查远端修订，Agent 的修改会原地同步进已打开的编辑器：保留当前缩放、滚动位置和工具，且不进入撤销历史；只有切换到另一张图时才重建编辑器。
+编辑器页头只保留标题（图纸库里另有返回列表按钮）；已保存是常态，不显示，只有保存中、有未保存修改或保存暂停时才显示状态；有未保存修改或自动保存暂停时才出现“保存”按钮。冲突或错误会暂停自动保存，保留编辑器草稿，用户可以从菜单导出草稿或明确放弃后重新载入。不会静默覆盖。
 编辑器菜单（☰）里的“导出”下载标准 `.excalidraw` 文件，需要宿主允许 iframe 下载。关闭宿主可能不触发浏览器退出提示，请先确认“已保存”。
 
 ## 本地存储
@@ -142,6 +144,8 @@ npm run test:stdio
 一个独立 TypeScript 包；React 18.3 + Excalidraw 0.18.1、MCP SDK 1.32 + MCP Apps 1.7.5、Vite、普通 CSS。使用 MCP Apps v1 与 MCP SDK v1 配对，未混入 SDK v2。
 
 真实编辑器本身有体积成本：自包含 HTML 约 5.23 MB（准确字节数以构建输出为准），相比原始 9.01 MB 减少约 42%。JS/CSS 和字体在本地构建时内联，不从 CDN 加载。只打包许可已核实的字体：Excalifont、Cascadia Code、Liberation 分别以 Virgil、Comic Shanns、Assistant 渲染，Xiaolai（约 12 MiB）以 Assistant 加系统中文字体代替，详见 [字体许可](licenses/FONTS.md)。图纸文件中的字体设置不变，仅本插件内显示字形不同；字体原文件未被修改。
+
+MCP Apps 宿主在 `resourceDomains` 为空时通常不放行 `font-src`，`data:` 字体会被拒绝，手写字体退回衬线体。界面在 Excalidraw 创建字体前把内联字体解码为 `ArrayBuffer` 再交给 `FontFace`，不产生可被 CSP 拦截的请求（`src/app/fonts.ts`）；浏览器测试用不含 `font-src` 的 CSP 覆盖这一点。Excalidraw 只给 Excalifont 配了中文回退，其余字体的中文会落到浏览器默认字体（常为宋体），因此为其共同的最后回退 `Segoe UI Emoji` 注册了仅限 CJK 码位的系统中文字体别名：优先手写风格的 Xiaolai SC / 霞鹜文楷（若已安装），其次苹方、冬青黑体、微软雅黑、思源/Noto Sans CJK、文泉驿。Excalidraw 自身界面的 Assistant 字体由其 CSS 引用，在严格 CSP 下回退为系统字体，不影响画布。
 
 Mermaid 转换库及其 Mermaid/Cytoscape/KaTeX 依赖图不进入 UI 构建；粘贴 Mermaid 源码会保留为可编辑文本，不转换为图形。Agent 仍直接生成或修改 Excalidraw 元素。保留全部现有语言包与字体子集化能力。
 
@@ -168,11 +172,12 @@ npm run test:browser
 - 浏览器：仅绑定 `127.0.0.1` 随机端口的测试宿主，官方 AppBridge + sandbox iframe + 禁止远程网络的 CSP；鼠标绘图、落盘、Mermaid 入口移除、Mermaid/普通文本粘贴保存、Agent 修改、重新打开、375px 溢出检查；新增固定 ID/无串图、预览只读、返回前保存、缩略图/搜索/独立副本、同 ID 更新、冲突后保留草稿/导出及长标题检查。结束后关闭服务、清理临时图纸。
 - 截图写入 `.test-output/`，不提交。测试不使用 `~/.excalidraw-plugin/`。
 
-## Sidebar（实验）
+## 侧边栏（Global 入口）
 
-在服务进程设置 `EXCALIDRAW_ENABLE_SIDEBAR=1`，会为 `open_library` 加入 `openai/ui.entrypoints: [{type: "global"}]` 元数据。
-该入口使用 `ui://excalidraw/library.html`，先进入图纸列表，再进入详情。对话图纸使用 `ui://excalidraw/editor.html`，先预览再编辑。两者共用真实数据与构建包。默认关闭 Sidebar 元数据，不影响对话图纸 App。
-参考 [OpenAI Extensions](https://developers.openai.com/plugins/build/extensions)。尚未验证目标宿主是否接收该元数据或支持本机 stdio。
+`open_library` 默认带 `openai/ui.entrypoints: [{type: "global"}]` 元数据，支持的 OpenAI 宿主会把图纸库放进侧边栏，以带输入框的标签页打开；页面上下文进入该标签页自己的会话。在服务进程设置 `EXCALIDRAW_ENABLE_SIDEBAR=0` 可关闭。
+侧边栏图标来自服务端 `serverInfo.icons`（单色 SVG、`currentColor`、20×20 视口、1.33px 描边）；当前 MCP SDK 不输出工具级 `icons`，按规范宿主会回退到服务端图标。
+该入口使用 `ui://excalidraw/library.html`，先进入图纸列表，再进入详情。对话图纸使用 `ui://excalidraw/editor.html`，直接进入编辑器。两者共用真实数据与构建包，不支持该扩展的宿主会忽略这项元数据。
+参考 [OpenAI Extensions](https://developers.openai.com/plugins/build/extensions) 及其规范 [openai/mcp-extensions](https://github.com/openai/mcp-extensions/blob/main/docs/spec.md)。尚未在真实宿主中验证侧边栏显示与图标。
 
 ## 安全与发布限制
 

@@ -3,33 +3,33 @@ import { exportToBlob, restore } from '@excalidraw/excalidraw';
 import { callTool } from './bridge';
 import { sceneOf, type Drawing, type DrawingSummary } from '../shared/schemas';
 
-/** Rasterize with the real SDK; never inject drawing text as HTML or SVG. */
-export function Preview({ document: doc, summary, dark = false }: { document?: Drawing; summary?: DrawingSummary; dark?: boolean }) {
+/** Library thumbnail, rasterized with the real SDK; never inject drawing text as HTML or SVG. */
+export function Preview({ summary, dark = false }: { summary: DrawingSummary; dark?: boolean }) {
   const container = useRef<HTMLSpanElement>(null);
-  const [visible, setVisible] = useState(!!doc);
+  const [visible, setVisible] = useState(false);
   const [image, setImage] = useState('');
   const [state, setState] = useState('读取预览中');
   useEffect(() => {
-    if (doc || !container.current) return;
+    if (!container.current) return;
     const observer = new IntersectionObserver(entries => {
       if (entries.some(entry => entry.isIntersecting)) { setVisible(true); observer.disconnect(); }
     });
     observer.observe(container.current);
     return () => observer.disconnect();
-  }, [doc]);
+  }, []);
   useEffect(() => {
     if (!visible) return;
     let cancelled = false;
     setImage(''); setState('读取预览中');
     void (async () => {
-      const source = doc ?? (await callTool<{ document: Drawing }>('read_drawing', { id: summary!.id })).document;
+      const source = (await callTool<{ document: Drawing }>('read_drawing', { id: summary.id })).document;
       if (cancelled) return;
       if (!source.elements.some(element => !element.isDeleted)) { setState('空白图纸'); return; }
       const restored = restore(sceneOf(source) as unknown as Parameters<typeof restore>[0], null, null);
       // Default white paper is drawn by the card itself so it can follow the host theme.
       const background = String(source.appState.viewBackgroundColor ?? '#ffffff').toLowerCase();
       const exportBackground = !['#ffffff', '#fff', 'white', 'transparent'].includes(background);
-      const blob = await exportToBlob({ ...restored, appState: { ...restored.appState, exportBackground, exportWithDarkMode: dark, exportEmbedScene: false }, maxWidthOrHeight: doc ? 1600 : 480, mimeType: 'image/png' });
+      const blob = await exportToBlob({ ...restored, appState: { ...restored.appState, exportBackground, exportWithDarkMode: dark, exportEmbedScene: false }, maxWidthOrHeight: 480, mimeType: 'image/png' });
       // Host CSPs commonly allow data: images but not blob:, so inline the PNG.
       const url = await new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
@@ -40,8 +40,8 @@ export function Preview({ document: doc, summary, dark = false }: { document?: D
       if (!cancelled) setImage(url);
     })().catch(() => { if (!cancelled) setState('预览不可用，可打开编辑'); });
     return () => { cancelled = true; };
-  }, [visible, doc, dark, summary?.id, summary?.revision]);
+  }, [visible, dark, summary.id, summary.revision]);
   return <span className="scene-preview" ref={container}>
-    {image ? <img src={image} alt={`${doc?.plugin.title ?? summary?.title}的图纸预览`} /> : <span className="preview-placeholder">{state}</span>}
+    {image ? <img src={image} alt={`${summary.title}的图纸预览`} /> : <span className="preview-placeholder">{state}</span>}
   </span>;
 }

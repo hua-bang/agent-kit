@@ -29,7 +29,7 @@ try {
     env: { ...process.env, EXCALIDRAW_PLUGIN_DIR: data },
   }));
   const tools = await client.listTools();
-  assert.equal(tools.tools.length, 7);
+  assert.equal(tools.tools.length, 8);
   const created = await client.callTool({ name: 'create_drawing', arguments: { title: 'Plugin package smoke' } });
   assert.ok(!created.isError);
   const doc = created.structuredContent.document;
