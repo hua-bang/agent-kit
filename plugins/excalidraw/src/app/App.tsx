@@ -136,8 +136,8 @@ export function App() {
       if (polling || document.visibilityState !== 'visible') return;
       polling = true;
       try {
-        const next = await callTool<Library>('list_drawings');
-        if (mounted.current) setLibrary(previous => previous && librarySignature(previous) === librarySignature(next) ? previous : next);
+        const next = await fetchLibrary();
+        if (next) setLibrary(previous => previous && librarySignature(previous) === librarySignature(next) ? previous : next);
       } catch { /* The manual refresh button reports errors. */ }
       finally { polling = false; }
     };
@@ -147,9 +147,16 @@ export function App() {
     window.addEventListener('focus', onVisible);
     return () => { clearInterval(timer); document.removeEventListener('visibilitychange', onVisible); window.removeEventListener('focus', onVisible); };
   }, [connected, doc]);
+  // Polling and manual refresh can overlap; only the most recently started request may update the list.
+  const listRequest = useRef(0);
+  async function fetchLibrary() {
+    const request = ++listRequest.current;
+    const data = await callTool<Library>('list_drawings');
+    return mounted.current && request === listRequest.current ? data : null;
+  }
   async function refreshLibrary() {
     setRefreshing(true);
-    try { const data = await callTool<Library>('list_drawings'); if (mounted.current) setLibrary(data); }
+    try { const data = await fetchLibrary(); if (data) setLibrary(data); }
     catch (e) { if (mounted.current) setError(String(e)); }
     finally { if (mounted.current) setRefreshing(false); }
   }
@@ -182,12 +189,16 @@ export function App() {
     if (!connected) return;
     let checking = false;
     const timer = setInterval(async () => {
-      if (!current.current || dirty.current || saving.current || checking || conflict.current) return;
+      if (!current.current || dirty.current || saving.current || checking || conflict.current || document.visibilityState !== 'visible') return;
       checking = true;
       const id = current.current.plugin.id;
+      const fresh = () => current.current?.plugin.id === id && !dirty.current && !saving.current;
       try {
+        // Compare revisions through the light metadata list; fetch the full scene (with images) only when it changed.
+        const latest = (await callTool<Library>('list_drawings')).drawings.find(d => d.id === id);
+        if (latest && latest.revision <= (current.current?.plugin.revision ?? Infinity)) return;
         const result = await callTool<{ document: Drawing }>('read_drawing', { id });
-        if (current.current?.plugin.id === id && !dirty.current && !saving.current && result.document.plugin.revision > current.current.plugin.revision) load(result.document);
+        if (fresh() && result.document.plugin.revision > current.current!.plugin.revision) load(result.document);
       } catch (e) { setError(tRef.current.refreshFailed(String(e))); }
       finally { checking = false; }
     }, 5000);

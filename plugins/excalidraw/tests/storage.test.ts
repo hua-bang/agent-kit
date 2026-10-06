@@ -30,6 +30,19 @@ describe('local drawing storage', () => {
     await expect(store.save(doc.plugin.id, 1, emptyScene)).rejects.toBeInstanceOf(ConflictError);
     expect((await store.read(doc.plugin.id)).elements).toEqual([box]);
   });
+  it('keeps the cached list in step with writes from other processes and outside edits', async () => {
+    const doc = await store.create('cached');
+    const other = await store.create('other');
+    expect((await store.list()).drawings.map(d => d.revision)).toEqual([1, 1]);
+    await new DrawingStore(root).save(doc.plugin.id, 1, emptyScene, 'renamed');
+    expect((await store.list()).drawings.find(d => d.id === doc.plugin.id)).toMatchObject({ title: 'renamed', revision: 2 });
+    await writeFile(join(root, 'drawings', `${other.plugin.id}.excalidraw`), '{');
+    expect((await store.list()).warnings).toEqual([`Cannot read ${other.plugin.id}.excalidraw`]);
+    await rm(join(root, 'drawings', `${other.plugin.id}.excalidraw`));
+    const after = await store.list();
+    expect(after.warnings).toEqual([]);
+    expect(after.drawings.map(d => d.id)).toEqual([doc.plugin.id]);
+  });
   it('allows exactly one concurrent writer across store instances', async () => {
     const doc = await store.create('race');
     const results = await Promise.allSettled(Array.from({ length: 5 }, () => new DrawingStore(root).save(doc.plugin.id, 1, emptyScene)));

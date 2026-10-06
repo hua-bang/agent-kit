@@ -2,14 +2,16 @@ import { useEffect, useRef, useState } from 'react';
 import { exportToBlob, restore } from '@excalidraw/excalidraw';
 import { callTool } from './bridge';
 import type { Messages, PreviewState } from './i18n';
+import { cachedThumbnail, thumbnail, thumbnailKey } from './thumbnails';
 import { sceneOf, type Drawing, type DrawingSummary } from '../shared/schemas';
 
 /** Library thumbnail, rasterized with the real SDK; never inject drawing text as HTML or SVG. */
 export function Preview({ summary, dark = false, t }: { summary: DrawingSummary; dark?: boolean; t: Messages }) {
   const container = useRef<HTMLSpanElement>(null);
   const [visible, setVisible] = useState(false);
-  const [image, setImage] = useState('');
-  const [state, setState] = useState<PreviewState>('loading');
+  const key = thumbnailKey(summary.id, summary.revision, dark);
+  const [image, setImage] = useState(() => cachedThumbnail(key) ?? '');
+  const [state, setState] = useState<PreviewState>(() => cachedThumbnail(key) === '' ? 'empty' : 'loading');
   useEffect(() => {
     if (!container.current) return;
     const observer = new IntersectionObserver(entries => {
@@ -21,11 +23,10 @@ export function Preview({ summary, dark = false, t }: { summary: DrawingSummary;
   useEffect(() => {
     if (!visible) return;
     let cancelled = false;
-    setImage(''); setState('loading');
-    void (async () => {
+    // A newer revision keeps showing the previous image until its own is ready.
+    void thumbnail(key, async () => {
       const source = (await callTool<{ document: Drawing }>('read_drawing', { id: summary.id })).document;
-      if (cancelled) return;
-      if (!source.elements.some(element => !element.isDeleted)) { setState('empty'); return; }
+      if (!source.elements.some(element => !element.isDeleted)) return '';
       const restored = restore(sceneOf(source) as unknown as Parameters<typeof restore>[0], null, null);
       // Default white paper is drawn by the card itself so it can follow the host theme.
       const background = String(source.appState.viewBackgroundColor ?? '#ffffff').toLowerCase();
@@ -38,10 +39,13 @@ export function Preview({ summary, dark = false, t }: { summary: DrawingSummary;
         reader.onerror = () => reject(reader.error);
         reader.readAsDataURL(blob);
       });
-      if (!cancelled) setImage(url);
-    })().catch(() => { if (!cancelled) setState('unavailable'); });
+      return url;
+    }, () => cancelled).then(url => {
+      if (cancelled || url === null) return;
+      setImage(url); setState(url ? 'loading' : 'empty');
+    }).catch(() => { if (!cancelled) { setImage(''); setState('unavailable'); } });
     return () => { cancelled = true; };
-  }, [visible, dark, summary.id, summary.revision]);
+  }, [visible, key]);
   return <span className="scene-preview" ref={container}>
     {image ? <img src={image} alt={t.previewAlt(summary.title)} /> : <span className="preview-placeholder">{t.preview[state]}</span>}
   </span>;

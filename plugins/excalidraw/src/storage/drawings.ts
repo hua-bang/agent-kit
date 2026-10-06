@@ -9,8 +9,13 @@ const MAX_BYTES = 4 * 1024 * 1024;
 export class ConflictError extends Error {
   constructor(public currentRevision: number) { super(`Revision conflict: current revision is ${currentRevision}. Read latest before retrying.`); }
 }
+type Stat = Awaited<ReturnType<typeof lstat>>;
+// A file is unchanged while its inode, size, mtime and ctime are; atomic saves always replace the inode.
+const fingerprint = (stat: Stat) => `${stat.ino}:${stat.size}:${stat.mtimeMs}:${stat.ctimeMs}`;
 export class DrawingStore {
   readonly root: string;
+  // Metadata of files already validated, so polling the list does not re-parse every scene and image.
+  private summaries = new Map<string, { fingerprint: string; plugin: Drawing['plugin'] }>();
   constructor(root = process.env.EXCALIDRAW_PLUGIN_DIR || join(homedir(), '.excalidraw-plugin')) {
     this.root = resolve(root);
   }
@@ -47,12 +52,31 @@ export class DrawingStore {
     await this.init();
     const drawings: Drawing['plugin'][] = [];
     const warnings: string[] = [];
-    for (const entry of await readdir(join(this.root, 'drawings'))) {
-      if (!entry.endsWith('.excalidraw')) continue;
-      try { drawings.push((await this.read(entry.slice(0, -11))).plugin); }
-      catch { warnings.push(`Cannot read ${entry}`); }
-    }
-    return { drawings: drawings.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)), warnings };
+    const entries = (await readdir(join(this.root, 'drawings'))).filter(entry => entry.endsWith('.excalidraw'));
+    for (const name of this.summaries.keys()) if (!entries.includes(name)) this.summaries.delete(name);
+    // A few files at a time: fast on a cold start, without opening hundreds of files at once.
+    let next = 0;
+    const worker = async () => {
+      for (let entry = entries[next++]; entry !== undefined; entry = entries[next++]) {
+        try { drawings.push(await this.summary(entry)); }
+        catch { this.summaries.delete(entry); warnings.push(`Cannot read ${entry}`); }
+      }
+    };
+    await Promise.all(Array.from({ length: 8 }, worker));
+    return { drawings: drawings.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt) || a.id.localeCompare(b.id)), warnings: warnings.sort() };
+  }
+  // Called under the write lock right after this store wrote the file.
+  private async remember(plugin: Drawing['plugin']) {
+    try { this.summaries.set(`${plugin.id}.excalidraw`, { fingerprint: fingerprint(await lstat(this.path(plugin.id))), plugin }); }
+    catch { /* The next list() reads the file instead. */ }
+  }
+  private async summary(entry: string) {
+    const stat = await lstat(join(this.root, 'drawings', entry));
+    const cached = this.summaries.get(entry);
+    if (cached && cached.fingerprint === fingerprint(stat) && stat.isFile()) return cached.plugin;
+    const { plugin } = await this.read(entry.slice(0, -11));
+    this.summaries.set(entry, { fingerprint: fingerprint(stat), plugin });
+    return plugin;
   }
   async read(id: string): Promise<Drawing> {
     const doc = documentSchema.parse(JSON.parse(await this.readSafe(this.path(id))));
@@ -67,6 +91,7 @@ export class DrawingStore {
       const doc: Drawing = { type: 'excalidraw', version: 2, source: 'agent-kit/excalidraw', ...scene,
         plugin: { id: randomUUID(), title, revision: 1, createdAt: timestamp, updatedAt: timestamp } };
       await this.atomic(this.path(doc.plugin.id), JSON.stringify(doc));
+      await this.remember(doc.plugin);
       return doc;
     });
   }
@@ -84,6 +109,7 @@ export class DrawingStore {
       await this.directory(backupDir);
       await this.atomic(join(backupDir, `${current.plugin.revision}.excalidraw`), JSON.stringify(current));
       await this.atomic(this.path(id), serialized);
+      await this.remember(next.plugin);
       // Cleanup failure must not make a committed save look unsuccessful.
       try {
         const versions = (await readdir(backupDir)).filter(x => /^\d+\.excalidraw$/.test(x)).sort((a, b) => parseInt(b) - parseInt(a));
