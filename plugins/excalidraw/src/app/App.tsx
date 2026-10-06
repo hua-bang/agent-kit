@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Excalidraw, MainMenu, restore, serializeAsJSON } from '@excalidraw/excalidraw';
+import { CaptureUpdateAction, Excalidraw, MainMenu, restore, serializeAsJSON } from '@excalidraw/excalidraw';
 import { applyDocumentTheme, type McpUiTheme } from '@modelcontextprotocol/ext-apps';
 import type { ExcalidrawImperativeAPI } from '@excalidraw/excalidraw/types';
 import { bridge, callTool } from './bridge';
@@ -43,11 +43,25 @@ export function App() {
   useEffect(() => applyDocumentTheme(theme), [theme]);
 
   function load(next: Drawing) {
+    // A newer revision of the open drawing (agent edit, reload) replaces the scene in
+    // place so zoom, scroll and the active tool stay put; only a different drawing remounts.
+    const editor = current.current?.plugin.id === next.plugin.id ? api.current : null;
     current.current = next; draft.current = sceneOf(next); dirty.current = false; conflict.current = false;
     baseline.current = true;
-    editCounter.current++; api.current = null;
+    editCounter.current++;
     setDoc(next); setTitle(next.plugin.title); setError(''); setStatus('已保存');
-    setEditorKey(k => k + 1);
+    if (editor) {
+      const scene = restore(sceneOf(next) as unknown as Parameters<typeof restore>[0], null, null);
+      editor.addFiles(Object.values(scene.files));
+      // Not undoable: Ctrl+Z must not silently revert someone else's saved change.
+      editor.updateScene({ elements: scene.elements, appState: { viewBackgroundColor: scene.appState.viewBackgroundColor }, captureUpdate: CaptureUpdateAction.NEVER });
+      // The editor's own copy of the new scene is the baseline; no mount-time change follows.
+      baseline.current = false;
+      draft.current = sceneSchema.parse({ elements: editor.getSceneElementsIncludingDeleted(), appState: editor.getAppState(), files: editor.getFiles() });
+    } else {
+      api.current = null;
+      setEditorKey(k => k + 1);
+    }
   }
   handlers.current.receive = payload => {
     if (payload.document) {

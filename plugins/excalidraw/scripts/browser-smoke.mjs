@@ -178,9 +178,21 @@ try {
   await until(async () => (await titleOf(id)).title === '对话编辑后的图纸');
   assert.equal((await titleOf(copy.id)).title, '独立副本');
   // An Agent save reaches the open editor while it has no unsaved edits, without switching drawings.
+  // It is applied in place: the user's zoom and scroll survive, and it is not treated as an unsaved edit.
+  const zoomLabel = frame.locator('.reset-zoom-button');
+  await frame.locator('.zoom-in-button').click();
+  await frame.locator('.zoom-in-button').click();
+  const zoomBefore = await zoomLabel.innerText();
+  assert.notEqual(zoomBefore, '100%');
   const afterEdit = (await client.callTool({ name: 'read_drawing', arguments: { id } })).structuredContent.document;
-  await client.callTool({ name: 'save_drawing', arguments: { id, expectedRevision: afterEdit.plugin.revision, title: 'Agent 更新后的图纸', scene: { elements: afterEdit.elements, appState: afterEdit.appState, files: afterEdit.files } } });
+  await client.callTool({ name: 'save_drawing', arguments: { id, expectedRevision: afterEdit.plugin.revision, title: 'Agent 更新后的图纸', scene: { elements: [...afterEdit.elements, { id: 'agent-added', type: 'ellipse', x: 60, y: 60, width: 80, height: 50 }], appState: afterEdit.appState, files: afterEdit.files } } });
   await until(async () => (await titleInput.inputValue()) === 'Agent 更新后的图纸');
+  await page.waitForTimeout(1600);
+  assert.equal(await zoomLabel.innerText(), zoomBefore, 'Agent update keeps the viewport');
+  assert.equal(await frame.getByRole('button', { name: '保存', exact: true }).count(), 0, 'Agent update is not an unsaved edit');
+  const agentRevision = (await titleOf(id)).revision;
+  await page.waitForTimeout(1600);
+  assert.equal((await titleOf(id)).revision, agentRevision, 'Applying an agent update writes nothing back');
   await page.setViewportSize({ width: 375, height: 900 });
   await page.waitForTimeout(400);
   await page.screenshot({ path: '.test-output/card-mobile.png' });
