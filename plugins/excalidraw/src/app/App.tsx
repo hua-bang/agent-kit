@@ -4,7 +4,8 @@ import { applyDocumentTheme, type McpUiTheme } from '@modelcontextprotocol/ext-a
 import type { ExcalidrawImperativeAPI } from '@excalidraw/excalidraw/types';
 import { bridge, callTool } from './bridge';
 import { Preview } from './Preview';
-import { IconBack, IconCanvas, IconCopy, IconDownload, IconPlus, IconRefresh, IconSearch } from './icons';
+import { messagesFor, pickLocale, storedLocale, storeLocale, type Locale, type Messages, type Status } from './i18n';
+import { IconBack, IconCanvas, IconCopy, IconDownload, IconLanguage, IconPlus, IconRefresh, IconSearch } from './icons';
 import { documentSchema, sceneSchema, sceneOf, type Drawing, type DrawingSummary, type Scene } from '../shared/schemas';
 
 type Library = { drawings: DrawingSummary[]; warnings: string[] };
@@ -35,7 +36,13 @@ export function App() {
   const saving = useRef(false);
   const editCounter = useRef(0);
   const conflict = useRef(false);
-  const [status, setStatus] = useState('连接宿主中');
+  const [hostLocale, setLocale] = useState<Locale>(() => pickLocale());
+  const [chosenLocale, setChosenLocale] = useState<Locale | null>(storedLocale);
+  const locale = chosenLocale ?? hostLocale;
+  function toggleLocale() { const next = locale === 'en' ? 'zh-CN' : 'en'; storeLocale(next); setChosenLocale(next); }
+  const t = messagesFor(locale);
+  const tRef = useRef(t); tRef.current = t; // For callbacks registered once.
+  const [status, setStatus] = useState<Status>('connecting');
   const [error, setError] = useState('');
   const [library, setLibrary] = useState<Library | null>(null);
   const [query, setQuery] = useState('');
@@ -57,7 +64,7 @@ export function App() {
     current.current = next; draft.current = sceneOf(next); dirty.current = false; conflict.current = false;
     baseline.current = true;
     editCounter.current++;
-    setDoc(next); setTitle(next.plugin.title); setError(''); setStatus('已保存');
+    setDoc(next); setTitle(next.plugin.title); setError(''); setStatus('saved');
     if (editor) {
       const scene = restore(sceneOf(next) as unknown as Parameters<typeof restore>[0], null, null);
       editor.addFiles(Object.values(scene.files));
@@ -77,7 +84,7 @@ export function App() {
       if (!isLibrary && boundId.current && boundId.current !== next.plugin.id) return;
       if (!isLibrary) boundId.current = next.plugin.id;
       if (current.current?.plugin.id === next.plugin.id && current.current.plugin.revision >= next.plugin.revision) return;
-      if (dirty.current || saving.current) { setError('收到新的图纸结果，当前有未保存修改。请先保存或导出，再重新打开目标图纸。'); return; }
+      if (dirty.current || saving.current) { setError(tRef.current.incomingWhileDirty); return; }
       load(next);
     } else if (isLibrary && payload.view === 'library' && !dirty.current && !saving.current) {
       current.current = null; setDoc(null); void refreshLibrary();
@@ -91,6 +98,7 @@ export function App() {
     };
     bridge.onhostcontextchanged = context => {
       if (context.theme) setTheme(context.theme);
+      if (context.locale) setLocale(pickLocale(context.locale));
       if (context.containerDimensions || context.displayMode) applyFill();
       // OpenAI hosts clear this when the user removes the context attachment.
       if ((context as Record<string, unknown>)['openai/modelContext'] === null) dismissedContext.current = sentContext.current;
@@ -99,11 +107,12 @@ export function App() {
       if (!mounted.current) return;
       const hostTheme = bridge.getHostContext()?.theme;
       if (hostTheme) setTheme(hostTheme);
+      setLocale(pickLocale(bridge.getHostContext()?.locale));
       applyFill();
-      setConnected(true); setStatus('已连接');
+      setConnected(true); setStatus('connected');
       // A tool result may arrive with the handshake. Do not replace its document.
       if (isLibrary) void refreshLibrary();
-    }).catch(e => { setError(`无法连接 MCP 宿主：${e.message}。请从支持 MCP Apps 的宿主打开此界面。`); setStatus('未连接'); });
+    }).catch(e => { setError(tRef.current.connectFailed(e.message)); setStatus('disconnected'); });
     return () => { mounted.current = false; };
   }, []);
   useEffect(() => {
@@ -127,8 +136,8 @@ export function App() {
       if (polling || document.visibilityState !== 'visible') return;
       polling = true;
       try {
-        const next = await callTool<Library>('list_drawings');
-        if (mounted.current) setLibrary(previous => previous && librarySignature(previous) === librarySignature(next) ? previous : next);
+        const next = await fetchLibrary();
+        if (next) setLibrary(previous => previous && librarySignature(previous) === librarySignature(next) ? previous : next);
       } catch { /* The manual refresh button reports errors. */ }
       finally { polling = false; }
     };
@@ -138,15 +147,22 @@ export function App() {
     window.addEventListener('focus', onVisible);
     return () => { clearInterval(timer); document.removeEventListener('visibilitychange', onVisible); window.removeEventListener('focus', onVisible); };
   }, [connected, doc]);
+  // Polling and manual refresh can overlap; only the most recently started request may update the list.
+  const listRequest = useRef(0);
+  async function fetchLibrary() {
+    const request = ++listRequest.current;
+    const data = await callTool<Library>('list_drawings');
+    return mounted.current && request === listRequest.current ? data : null;
+  }
   async function refreshLibrary() {
     setRefreshing(true);
-    try { const data = await callTool<Library>('list_drawings'); if (mounted.current) setLibrary(data); }
+    try { const data = await fetchLibrary(); if (data) setLibrary(data); }
     catch (e) { if (mounted.current) setError(String(e)); }
     finally { if (mounted.current) setRefreshing(false); }
   }
   async function save() {
     if (!current.current || !draft.current || !dirty.current || saving.current || conflict.current) return;
-    saving.current = true; setStatus('正在保存');
+    saving.current = true; setStatus('saving');
     const target = current.current;
     const generation = editCounter.current;
     try {
@@ -156,11 +172,11 @@ export function App() {
       current.current = result.document;
       setDoc(result.document);
       dirty.current = generation !== editCounter.current;
-      setStatus(dirty.current ? '有未保存修改' : '已保存');
+      setStatus(dirty.current ? 'unsaved' : 'saved');
       setError('');
     } catch (e) {
       conflict.current = true; // Stop retry storms. Keep the unsaved draft available for export.
-      setStatus('保存暂停，修改仍在编辑器中'); setError(String(e));
+      setStatus('paused'); setError(String(e));
     } finally { saving.current = false; }
   }
   const saveRef = useRef(save); saveRef.current = save;
@@ -173,13 +189,17 @@ export function App() {
     if (!connected) return;
     let checking = false;
     const timer = setInterval(async () => {
-      if (!current.current || dirty.current || saving.current || checking || conflict.current) return;
+      if (!current.current || dirty.current || saving.current || checking || conflict.current || document.visibilityState !== 'visible') return;
       checking = true;
       const id = current.current.plugin.id;
+      const fresh = () => current.current?.plugin.id === id && !dirty.current && !saving.current;
       try {
+        // Compare revisions through the light metadata list; fetch the full scene (with images) only when it changed.
+        const latest = (await callTool<Library>('list_drawings')).drawings.find(d => d.id === id);
+        if (latest && latest.revision <= (current.current?.plugin.revision ?? Infinity)) return;
         const result = await callTool<{ document: Drawing }>('read_drawing', { id });
-        if (current.current?.plugin.id === id && !dirty.current && !saving.current && result.document.plugin.revision > current.current.plugin.revision) load(result.document);
-      } catch (e) { setError(`刷新失败：${String(e)}`); }
+        if (fresh() && result.document.plugin.revision > current.current!.plugin.revision) load(result.document);
+      } catch (e) { setError(tRef.current.refreshFailed(String(e))); }
       finally { checking = false; }
     }, 5000);
     return () => clearInterval(timer);
@@ -196,14 +216,14 @@ export function App() {
   useEffect(() => {
     if (!connected || !bridge.getHostCapabilities()?.updateModelContext?.text) return;
     const timer = setTimeout(() => {
-      const context = describeView(isLibrary, doc, library, query);
+      const context = describeView(t, isLibrary, doc, library, query);
       if (!context || context.key === dismissedContext.current) return;
       dismissedContext.current = null;
       sentContext.current = context.key;
       void bridge.updateModelContext(context.params).catch(() => {});
     }, 400);
     return () => clearTimeout(timer);
-  }, [connected, doc?.plugin.id, doc?.plugin.revision, doc?.plugin.title, library, query]);
+  }, [connected, doc?.plugin.id, doc?.plugin.revision, doc?.plugin.title, library, query, locale]);
 
   async function action(work: () => Promise<void>) {
     setBusy(true); setError('');
@@ -217,36 +237,36 @@ export function App() {
     anchor.href = url; anchor.download = current.current.plugin.title.replace(/[\\/:*?"<>|]/g, '_') + '.excalidraw'; anchor.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
-  function changed() { dirty.current = true; editCounter.current++; setStatus('有未保存修改'); }
+  function changed() { dirty.current = true; editCounter.current++; setStatus('unsaved'); }
 
   async function leaveEditor() {
     await save();
-    if (dirty.current || saving.current) throw new Error('请先保存修改，或导出草稿后重新载入。');
+    if (dirty.current || saving.current) throw new Error(t.saveBeforeLeaving);
     api.current = null;
     setNotice(''); // Notices describe the editor session; do not carry them back to the list.
     current.current = null; setDoc(null); setLibrary(null); await refreshLibrary();
   }
   const matches = library?.drawings.filter(d => d.title.toLocaleLowerCase().includes(query.toLocaleLowerCase())) ?? [];
-  const tone = /暂停|未连接|失败/.test(status) ? 'error' : /正在保存|未保存/.test(status) ? 'pending' : /已保存/.test(status) ? 'ok' : 'idle';
+  const tone = status === 'paused' || status === 'disconnected' ? 'error' : status === 'saving' || status === 'unsaved' ? 'pending' : status === 'saved' ? 'ok' : 'idle';
   // Autosave makes "saved" the normal state: announce it to screen readers, show only the exceptions.
-  const statusPill = <span className={`status tone-${tone}`} role="status" aria-live="polite">{tone === 'ok' ? <span className="sr-only">{status}</span> : <><i aria-hidden="true" />{status}</>}</span>;
+  const statusPill = <span className={`status tone-${tone}`} role="status" aria-live="polite">{tone === 'ok' ? <span className="sr-only">{t.status[status]}</span> : <><i aria-hidden="true" />{t.status[status]}</>}</span>;
   const messages = <>
-    {error && <div className="banner error" role="alert"><span>{error}</span>{!doc && connected && isLibrary && <button className="tool" onClick={() => void refreshLibrary()}>重试</button>}</div>}
+    {error && <div className="banner error" role="alert"><span>{error}</span>{!doc && connected && isLibrary && <button className="tool" onClick={() => void refreshLibrary()}>{t.retry}</button>}</div>}
     {notice && <div className="banner notice" role="status">{notice}</div>}
   </>;
   // A drawing always opens in the editor: the library enters it from the list, a conversation card shows it directly.
-  return <main className={`app ${isLibrary ? 'library-surface' : 'drawing-surface'} ${doc ? 'is-editing' : ''}`}>
-    <a className="skip-link" href="#main-content">跳到图纸内容</a>
+  return <main lang={locale} className={`app ${isLibrary ? 'library-surface' : 'drawing-surface'} ${doc ? 'is-editing' : ''}`}>
+    <a className="skip-link" href="#main-content">{t.skipLink}</a>
     {doc ? <>
       <header className="editor-bar">
-        {isLibrary && <button className="ghost back" disabled={busy} onClick={() => void action(leaveEditor)}><IconBack />图纸列表</button>}
-        <input aria-label="图纸名称" className="title" value={title} maxLength={160} onChange={e => { setTitle(e.target.value); changed(); }} />
+        {isLibrary && <button className="ghost back" disabled={busy} onClick={() => void action(leaveEditor)}><IconBack />{t.backToList}</button>}
+        <input aria-label={t.titleLabel} className="title" value={title} maxLength={160} onChange={e => { setTitle(e.target.value); changed(); }} />
         {statusPill}
         {/* Autosave covers the normal case; the button only appears while work is unsaved or paused. */}
-        {(tone === 'pending' || tone === 'error') && <button className="tool save" disabled={busy} onClick={() => { conflict.current = false; void save(); }}>保存</button>}
+        {(tone === 'pending' || tone === 'error') && <button className="tool save" disabled={busy} onClick={() => { conflict.current = false; void save(); }}>{t.save}</button>}
       </header>
       {messages}
-      <section id="main-content" className="editor" aria-label="Agentic Excalidraw 编辑器">
+      <section id="main-content" className="editor" aria-label={t.editorLabel}>
       <Excalidraw key={editorKey}
         excalidrawAPI={value => {
           api.current = value;
@@ -256,7 +276,7 @@ export function App() {
         // New shapes and text default to the hand-drawn style: sketchy lines and Virgil
         // (the face this build actually renders, so drawings look the same in Excalidraw).
         initialData={{ ...restore({ ...sceneOf(doc), appState: { ...doc.appState, currentItemFontFamily: 1, currentItemRoughness: 1 } } as unknown as Parameters<typeof restore>[0], null, null) }}
-        langCode="zh-CN" autoFocus={false} aiEnabled={false} theme={theme}
+        langCode={locale} autoFocus={false} aiEnabled={false} theme={theme}
         onScrollChange={() => { if (Date.now() - lastFit.current > 500) viewportMoved.current = true; }}
         onLinkOpen={(_element, event) => event.preventDefault()}
         UIOptions={{ canvasActions: { loadScene: false, saveToActiveFile: false, export: false, saveAsImage: false, toggleTheme: false }, tools: { image: true } }}
@@ -267,22 +287,23 @@ export function App() {
             if (JSON.stringify(scene) !== JSON.stringify(draft.current)) {
               draft.current = scene; changed();
             }
-          } catch (e) { conflict.current = true; setError(`无法自动保存此场景，请导出草稿：${String(e)}`); }
+          } catch (e) { conflict.current = true; setError(tRef.current.cannotAutosave(String(e))); }
         }}>
         <MainMenu>
-          <MainMenu.Item icon={<IconDownload />} onSelect={download}>导出</MainMenu.Item>
+          <MainMenu.Item icon={<IconDownload />} onSelect={download}>{t.export}</MainMenu.Item>
           {isLibrary && <MainMenu.Item icon={<IconCopy />} disabled={busy} onSelect={() => void action(async () => {
             await save();
-            if (dirty.current || saving.current) throw new Error('请先保存修改，再复制图纸。');
+            if (dirty.current || saving.current) throw new Error(t.saveBeforeCopy);
             const source = current.current!;
-            load((await callTool<{ document: Drawing }>('create_drawing', { title: source.plugin.title.slice(0, 155) + ' 副本', scene: sceneOf(source) })).document);
-            setNotice('已打开独立副本，原图保持不变。');
-          })}>复制为新图</MainMenu.Item>}
+            load((await callTool<{ document: Drawing }>('create_drawing', { title: source.plugin.title.slice(0, 160 - t.copySuffix.length) + t.copySuffix, scene: sceneOf(source) })).document);
+            setNotice(t.copyOpened);
+          })}>{t.duplicate}</MainMenu.Item>}
           <MainMenu.Item icon={<IconRefresh />} disabled={busy} onSelect={() => void action(async () => {
-            if (saving.current) throw new Error('请等待保存结束');
-            if (dirty.current && !window.confirm('放弃尚未保存的修改，重新载入本地图纸？建议先导出草稿。')) return;
+            if (saving.current) throw new Error(t.waitForSave);
+            if (dirty.current && !window.confirm(t.confirmReload)) return;
             load((await callTool<{ document: Drawing }>('read_drawing', { id: current.current!.plugin.id })).document);
-          })}>重新载入</MainMenu.Item>
+          })}>{t.reload}</MainMenu.Item>
+          <MainMenu.Item icon={<IconLanguage />} title={t.switchLanguageLabel} onSelect={toggleLocale}>{t.switchLanguage}</MainMenu.Item>
           <MainMenu.Separator />
           <MainMenu.DefaultItems.ClearCanvas />
           <MainMenu.DefaultItems.ChangeCanvasBackground />
@@ -291,39 +312,40 @@ export function App() {
       </section>
     </> : isLibrary ? <>
       <header className="library-head" aria-label="Agentic Excalidraw">
-        <h1>图纸库</h1>
+        <h1>{t.library}</h1>
         {library && <span className="count">{query ? `${matches.length} / ${library.drawings.length}` : library.drawings.length}</span>}
-        <button className="tool icon-button" aria-label="刷新" title="刷新" disabled={!connected || busy || refreshing} onClick={() => void refreshLibrary()}><IconRefresh className={refreshing ? 'spin' : ''} /></button>
+        <button className="tool" lang={locale === 'en' ? 'zh-CN' : 'en'} title={t.switchLanguageLabel} onClick={toggleLocale}><IconLanguage />{t.switchLanguage}</button>
+        <button className="tool icon-button" aria-label={t.refresh} title={t.refresh} disabled={!connected || busy || refreshing} onClick={() => void refreshLibrary()}><IconRefresh className={refreshing ? 'spin' : ''} /></button>
       </header>
       {messages}
-      <section id="main-content" className="library" aria-label="图纸库">
+      <section id="main-content" className="library" aria-label={t.library}>
         <div className="toolbar">
           <label className="search"><IconSearch />
-            <input type="search" aria-label="搜索图纸" placeholder="搜索" value={query} onChange={e => { setQuery(e.target.value); setLimit(20); }} />
+            <input type="search" aria-label={t.searchLabel} placeholder={t.searchPlaceholder} value={query} onChange={e => { setQuery(e.target.value); setLimit(20); }} />
           </label>
-          <div className="composer" role="group" aria-label="新建图纸">
-            <input aria-label="新图纸名称" placeholder="新图纸名称" value={newTitle} maxLength={160} onChange={e => setNewTitle(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) e.currentTarget.parentElement?.querySelector('button')?.click(); }} />
+          <div className="composer" role="group" aria-label={t.newDrawingGroup}>
+            <input aria-label={t.newTitleLabel} placeholder={t.newTitleLabel} value={newTitle} maxLength={160} onChange={e => setNewTitle(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) e.currentTarget.parentElement?.querySelector('button')?.click(); }} />
             <button type="button" className="primary" disabled={!connected || busy} onClick={() => void action(async () => {
-              load((await callTool<{ document: Drawing }>('create_drawing', { title: newTitle.trim() || '未命名图纸' })).document);
+              load((await callTool<{ document: Drawing }>('create_drawing', { title: newTitle.trim() || t.untitled })).document);
               setNewTitle(''); setNotice('');
-            })}><IconPlus />新建图纸</button>
+            })}><IconPlus />{t.newDrawing}</button>
           </div>
         </div>
-        {!library ? <p className="empty-state" role="status">{error ? '无法读取图纸，请重试。' : connected ? '读取本地图纸中' : '等待 MCP 宿主连接'}</p> : <>
-          {library.warnings.length > 0 && <p className="banner error inline" role="alert">{library.warnings.length} 个图纸文件无法读取，原文件未修改。</p>}
+        {!library ? <p className="empty-state" role="status">{error ? t.libraryLoadFailed : connected ? t.libraryLoading : t.waitingHost}</p> : <>
+          {library.warnings.length > 0 && <p className="banner error inline" role="alert">{t.unreadable(library.warnings.length)}</p>}
           <div className="drawing-grid" aria-busy={refreshing}>
             {matches.slice(0, limit).map(d => <button className="drawing" key={d.id} disabled={busy || refreshing} onClick={() => void action(async () => {
               load((await callTool<{ document: Drawing }>('read_drawing', { id: d.id })).document); setNotice('');
-            })}><Preview summary={d} dark={theme === 'dark'} /><span className="drawing-info"><strong>{d.title}</strong><span className="meta">{relativeTime(d.updatedAt)}</span></span></button>)}
+            })}><Preview summary={d} dark={theme === 'dark'} t={t} /><span className="drawing-info"><strong>{d.title}</strong><span className="meta">{relativeTime(d.updatedAt, locale, t)}</span></span></button>)}
           </div>
-          {matches.length > limit && <button className="tool more" onClick={() => setLimit(value => value + 20)}>显示更多图纸</button>}
-          {!library.drawings.length && <div className="empty-state"><span className="empty-icon"><IconCanvas /></span><strong>从一张空白图纸开始</strong><p>新建图纸，或让 Agent 帮你画。</p></div>}
-          {!!library.drawings.length && !matches.length && <div className="empty-state"><p>没有匹配的图纸。</p><button className="tool" onClick={() => setQuery('')}>清除搜索</button></div>}
+          {matches.length > limit && <button className="tool more" onClick={() => setLimit(value => value + 20)}>{t.showMore}</button>}
+          {!library.drawings.length && <div className="empty-state"><span className="empty-icon"><IconCanvas /></span><strong>{t.emptyTitle}</strong><p>{t.emptyHint}</p></div>}
+          {!!library.drawings.length && !matches.length && <div className="empty-state"><p>{t.noMatches}</p><button className="tool" onClick={() => setQuery('')}>{t.clearSearch}</button></div>}
         </>}
       </section>
     </> : <section id="main-content" className="card waiting" role="status">
       <span className="empty-icon"><IconCanvas /></span>
-      <span>{connected ? '等待图纸，请让 Agent 打开或新建一张图。' : '连接 MCP 宿主中'}</span>
+      <span>{connected ? t.waitingDrawing : t.connecting}</span>
     </section>}
   </main>;
 }
@@ -333,7 +355,7 @@ export function App() {
  * `key` identifies the view (not its contents) so a removed attachment stays removed until it changes.
  * `openai/title` labels the composer attachment on OpenAI hosts; other hosts ignore it.
  */
-function describeView(isLibrary: boolean, doc: Drawing | null, library: Library | null, query: string) {
+function describeView(t: Messages, isLibrary: boolean, doc: Drawing | null, library: Library | null, query: string) {
   const block = (title: string, text: string) => ({ type: 'text' as const, text, _meta: { 'openai/title': title } });
   const drawing = (d: DrawingSummary) => ({ id: d.id, title: d.title, revision: d.revision, updatedAt: d.updatedAt });
   if (doc) {
@@ -359,7 +381,7 @@ function describeView(isLibrary: boolean, doc: Drawing | null, library: Library 
     'Call read_drawing with an id to see a drawing\'s content.',
   ].join('\n');
   return { key: `library:${query}`, params: {
-    content: [block(`Agentic Excalidraw 图纸库 · ${query ? `${shown.length}/` : ''}${library.drawings.length} 张`, text)],
+    content: [block(t.libraryContextTitle(`${query ? `${shown.length}/` : ''}${library.drawings.length}`), text)],
     structuredContent: { app: 'local-excalidraw', view: 'library', query, total: library.drawings.length, drawings: listed.map(drawing) },
   } };
 }
@@ -381,11 +403,11 @@ function applyFill() {
   document.documentElement.toggleAttribute('data-fill', fixed);
 }
 
-const relativeFormat = new Intl.RelativeTimeFormat('zh-CN', { numeric: 'auto' });
-function relativeTime(iso: string) {
+function relativeTime(iso: string, locale: Locale, t: Messages) {
+  const relativeFormat = new Intl.RelativeTimeFormat(locale, { numeric: 'auto' });
   const minutes = Math.round((Date.parse(iso) - Date.now()) / 60_000);
-  if (Math.abs(minutes) < 1) return '刚刚';
+  if (Math.abs(minutes) < 1) return t.justNow;
   if (Math.abs(minutes) < 60) return relativeFormat.format(minutes, 'minute');
   if (Math.abs(minutes) < 24 * 60) return relativeFormat.format(Math.round(minutes / 60), 'hour');
-  return new Date(iso).toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' });
+  return new Date(iso).toLocaleDateString(locale, { month: 'short', day: 'numeric' });
 }
