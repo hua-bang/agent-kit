@@ -6,12 +6,20 @@ import { DrawingStore, ConflictError } from '../storage/drawings.js';
 import { idSchema, titleSchema, sceneSchema, elementSchema, type Drawing } from '../shared/schemas.js';
 
 export const UI_URI = 'ui://excalidraw/editor.html';
+// Sidebar icon per the OpenAI entrypoint guidelines: monochrome SVG, currentColor,
+// 20x20 viewport, 1.33px strokes. Served as the server icon, which hosts use for
+// entrypoints when a tool has no icon of its own.
+const SIDEBAR_ICON = {
+  src: 'data:image/svg+xml;base64,' + Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.33" stroke-linecap="round" stroke-linejoin="round"><rect x="2.67" y="3.33" width="14.67" height="13.33" rx="2.67"/><path d="M5.33 12.67c1.6-3.6 3.2-4.4 4-2.8s1.8 2.8 2.8 1.1 1.2-3.4 2.53-4.3"/></svg>').toString('base64'),
+  mimeType: 'image/svg+xml',
+  sizes: ['any'],
+};
 export const LIBRARY_URI = 'ui://excalidraw/library.html';
 // Each drawing is also a readable resource, so @-mentions and resource links resolve to its content.
 export const drawingUri = (id: string) => `excalidraw://drawings/${id}`;
 const DRAWING_MIME = 'application/vnd.excalidraw+json';
 export function createServer(store = new DrawingStore(), htmlPath = new URL('../ui/index.html', import.meta.url)) {
-  const server = new McpServer({ name: 'local-excalidraw', version: '0.1.0' });
+  const server = new McpServer({ name: 'local-excalidraw', version: '0.1.0', icons: [SIDEBAR_ICON] });
   const ui = { resourceUri: UI_URI };
   const readonly = { readOnlyHint: true, openWorldHint: false };
   const writable = { readOnlyHint: false, destructiveHint: false, openWorldHint: false };
@@ -70,7 +78,7 @@ export function createServer(store = new DrawingStore(), htmlPath = new URL('../
   registerAppTool(server, 'open_library', {
     title: 'Excalidraw 图纸库', description: 'Open the dedicated local drawing library, intended for Sidebar. If the host cannot show Sidebar, this explicit library tool can open a library App. Use open_drawing for conversation cards.',
     inputSchema: {}, annotations: readonly,
-    _meta: { ui: { resourceUri: LIBRARY_URI }, ...(process.env.EXCALIDRAW_ENABLE_SIDEBAR === '1' ? { 'openai/ui': { entrypoints: [{ type: 'global' }] } } : {}) },
+    _meta: { ui: { resourceUri: LIBRARY_URI }, ...(process.env.EXCALIDRAW_ENABLE_SIDEBAR === '0' ? {} : { 'openai/ui': { entrypoints: [{ type: 'global' }] } }) },
   }, () => guarded(async () => ({ view: 'library', ...await store.list() })));
   server.registerTool('list_drawings', { description: 'List locally saved drawings without opening a UI.', inputSchema: {}, annotations: readonly },
     () => guarded(() => store.list()));

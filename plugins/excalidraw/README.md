@@ -8,7 +8,7 @@
 已实现并通过本地测试：固定 ID 的对话图纸预览/展开编辑/返回，独立图纸库入口、真实缩略图/搜索/新建/复制，手动绘图、自动保存、重新打开、Agent 增量修改、修订冲突保护、五版备份、嵌入图片存储。视觉与交互约束见 [DESIGN.md](DESIGN.md)。
 
 实际浏览器测试通过官方 MCP Apps AppBridge 连接真实 stdio Server，运行真实 Excalidraw SDK，并用鼠标绘制图形；这**不等于已通过 ChatGPT、Claude 或其他生产宿主的安装与兼容性验收**。
-Sidebar 扩展元数据是关闭的实验功能，尚未通过真实 OpenAI 宿主验证。
+侧边栏（Global）入口默认开启，尚未在真实 OpenAI 宿主中验收。
 
 ## Agent Plugins 包与 Codex 本地安装
 
@@ -170,11 +170,12 @@ npm run test:browser
 - 浏览器：仅绑定 `127.0.0.1` 随机端口的测试宿主，官方 AppBridge + sandbox iframe + 禁止远程网络的 CSP；鼠标绘图、落盘、Mermaid 入口移除、Mermaid/普通文本粘贴保存、Agent 修改、重新打开、375px 溢出检查；新增固定 ID/无串图、预览只读、返回前保存、缩略图/搜索/独立副本、同 ID 更新、冲突后保留草稿/导出及长标题检查。结束后关闭服务、清理临时图纸。
 - 截图写入 `.test-output/`，不提交。测试不使用 `~/.excalidraw-plugin/`。
 
-## Sidebar（实验）
+## 侧边栏（Global 入口）
 
-在服务进程设置 `EXCALIDRAW_ENABLE_SIDEBAR=1`，会为 `open_library` 加入 `openai/ui.entrypoints: [{type: "global"}]` 元数据。
-该入口使用 `ui://excalidraw/library.html`，先进入图纸列表，再进入详情。对话图纸使用 `ui://excalidraw/editor.html`，先预览再编辑。两者共用真实数据与构建包。默认关闭 Sidebar 元数据，不影响对话图纸 App。
-参考 [OpenAI Extensions](https://developers.openai.com/plugins/build/extensions)。尚未验证目标宿主是否接收该元数据或支持本机 stdio。
+`open_library` 默认带 `openai/ui.entrypoints: [{type: "global"}]` 元数据，支持的 OpenAI 宿主会把图纸库放进侧边栏，以带输入框的标签页打开；页面上下文进入该标签页自己的会话。在服务进程设置 `EXCALIDRAW_ENABLE_SIDEBAR=0` 可关闭。
+侧边栏图标来自服务端 `serverInfo.icons`（单色 SVG、`currentColor`、20×20 视口、1.33px 描边）；当前 MCP SDK 不输出工具级 `icons`，按规范宿主会回退到服务端图标。
+该入口使用 `ui://excalidraw/library.html`，先进入图纸列表，再进入详情。对话图纸使用 `ui://excalidraw/editor.html`，先预览再编辑。两者共用真实数据与构建包，不支持该扩展的宿主会忽略这项元数据。
+参考 [OpenAI Extensions](https://developers.openai.com/plugins/build/extensions) 及其规范 [openai/mcp-extensions](https://github.com/openai/mcp-extensions/blob/main/docs/spec.md)。尚未在真实宿主中验证侧边栏显示与图标。
 
 ## 安全与发布限制
 

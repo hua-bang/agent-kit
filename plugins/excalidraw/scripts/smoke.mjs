@@ -20,6 +20,11 @@ try {
   const tools = await client.listTools(); assert.equal(tools.tools.length, 8);
   const resources = await client.listResources(); assert.equal(resources.resources.length, 2);
   assert.equal(tools.tools.find(t => t.name === 'open_library')._meta.ui.resourceUri, 'ui://excalidraw/library.html');
+  // Sidebar (global) entrypoint is on by default, with a monochrome SVG server icon.
+  assert.deepEqual(tools.tools.find(t => t.name === 'open_library')._meta['openai/ui'], { entrypoints: [{ type: 'global' }] });
+  const icon = client.getServerVersion().icons[0];
+  assert.equal(icon.mimeType, 'image/svg+xml');
+  assert.match(Buffer.from(icon.src.split(',')[1], 'base64').toString(), /viewBox="0 0 20 20"[^>]*stroke="currentColor"/);
   assert.equal(tools.tools.find(t => t.name === 'open_drawing')._meta.ui.resourceUri, 'ui://excalidraw/editor.html');
   const libraryHtml = await client.readResource({ uri: 'ui://excalidraw/library.html' });
   assert.ok(libraryHtml.contents[0].text.includes('name="excalidraw-surface" content="library"'));
