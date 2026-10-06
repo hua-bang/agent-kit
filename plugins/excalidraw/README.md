@@ -173,7 +173,7 @@ npm run test:browser
 # 可选：PLAYWRIGHT_CHROMIUM_EXECUTABLE=/path/to/chromium npm run test:browser
 ```
 
-- 单元测试：14 项，包含 Mermaid 粘贴文本保留、开发/生产 SDK 菜单移除与上游变更保护，以及原有 8 项存储测试，覆盖文件持久化、图片、旧修订拒绝、多个 store 实例并发写入、备份保留、路径/符号链接/体积防护、坏文件隔离和场景校验。
+- 单元测试：15 项，包含 Mermaid 粘贴文本保留、开发/生产 SDK 菜单移除与上游变更保护，以及 9 项存储测试，覆盖文件持久化、列表元数据缓存、图片、旧修订拒绝、多个 store 实例并发写入、备份保留、路径/符号链接/体积防护、坏文件隔离和场景校验。
 - stdio：真实启动子进程，验证 handshake、工具、UI 资源、保存冲突、进程重启后读回及 Agent 更新保留用户坐标。
 - 浏览器：仅绑定 `127.0.0.1` 随机端口的测试宿主，官方 AppBridge + sandbox iframe + 禁止远程网络的 CSP；鼠标绘图、落盘、Mermaid 入口移除、Mermaid/普通文本粘贴保存、Agent 修改、重新打开、375px 溢出检查；新增固定 ID/无串图、预览只读、返回前保存、缩略图/搜索/独立副本、同 ID 更新、冲突后保留草稿/导出及长标题检查。结束后关闭服务、清理临时图纸。
 - 截图写入 `.test-output/`，不提交。测试不使用 `~/.excalidraw-plugin/`。
