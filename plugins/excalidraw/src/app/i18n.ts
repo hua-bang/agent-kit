@@ -1,4 +1,4 @@
-// UI strings. The host's BCP 47 `locale` wins; without one, the browser language decides.
+// UI strings. A language the user picked wins, then the host's BCP 47 `locale`, then the browser language.
 // Chinese tags get zh-CN, everything else English. Text sent to the model stays English.
 export type Locale = 'zh-CN' | 'en';
 export type Status = 'connecting' | 'connected' | 'disconnected' | 'saved' | 'saving' | 'unsaved' | 'paused';
@@ -48,6 +48,8 @@ const zh = {
   connecting: '连接 MCP 宿主中',
   justNow: '刚刚',
   libraryContextTitle: (count: string) => `Agentic Excalidraw 图纸库 · ${count} 张`,
+  switchLanguage: 'English',
+  switchLanguageLabel: '切换到英文',
   toolFailed: '工具调用失败',
   noStructuredData: '工具没有返回结构化数据',
 };
@@ -98,6 +100,8 @@ const en: Messages = {
   connecting: 'Connecting to the MCP host',
   justNow: 'just now',
   libraryContextTitle: count => `Agentic Excalidraw drawings · ${count}`,
+  switchLanguage: '中文',
+  switchLanguageLabel: 'Switch to Chinese',
   toolFailed: 'Tool call failed',
   noStructuredData: 'The tool returned no structured data',
 };
@@ -106,6 +110,16 @@ const messages: Record<Locale, Messages> = { 'zh-CN': zh, en };
 
 export function pickLocale(tag?: string): Locale {
   return /^zh(-|$)/i.test(tag || navigator.language) ? 'zh-CN' : 'en';
+}
+
+// Remembered per browser profile. Sandboxed hosts may deny storage; the choice then lasts until the view closes.
+const storageKey = 'agentic-excalidraw.locale';
+export function storedLocale(): Locale | null {
+  try { const value = localStorage.getItem(storageKey); return value === 'zh-CN' || value === 'en' ? value : null; }
+  catch { return null; }
+}
+export function storeLocale(locale: Locale) {
+  try { localStorage.setItem(storageKey, locale); } catch { /* Storage unavailable. */ }
 }
 
 export function messagesFor(locale: Locale): Messages {

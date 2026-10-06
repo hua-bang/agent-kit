@@ -4,8 +4,8 @@ import { applyDocumentTheme, type McpUiTheme } from '@modelcontextprotocol/ext-a
 import type { ExcalidrawImperativeAPI } from '@excalidraw/excalidraw/types';
 import { bridge, callTool } from './bridge';
 import { Preview } from './Preview';
-import { messagesFor, pickLocale, type Locale, type Messages, type Status } from './i18n';
-import { IconBack, IconCanvas, IconCopy, IconDownload, IconPlus, IconRefresh, IconSearch } from './icons';
+import { messagesFor, pickLocale, storedLocale, storeLocale, type Locale, type Messages, type Status } from './i18n';
+import { IconBack, IconCanvas, IconCopy, IconDownload, IconLanguage, IconPlus, IconRefresh, IconSearch } from './icons';
 import { documentSchema, sceneSchema, sceneOf, type Drawing, type DrawingSummary, type Scene } from '../shared/schemas';
 
 type Library = { drawings: DrawingSummary[]; warnings: string[] };
@@ -36,7 +36,10 @@ export function App() {
   const saving = useRef(false);
   const editCounter = useRef(0);
   const conflict = useRef(false);
-  const [locale, setLocale] = useState<Locale>(() => pickLocale());
+  const [hostLocale, setLocale] = useState<Locale>(() => pickLocale());
+  const [chosenLocale, setChosenLocale] = useState<Locale | null>(storedLocale);
+  const locale = chosenLocale ?? hostLocale;
+  function toggleLocale() { const next = locale === 'en' ? 'zh-CN' : 'en'; storeLocale(next); setChosenLocale(next); }
   const t = messagesFor(locale);
   const tRef = useRef(t); tRef.current = t; // For callbacks registered once.
   const [status, setStatus] = useState<Status>('connecting');
@@ -289,6 +292,7 @@ export function App() {
             if (dirty.current && !window.confirm(t.confirmReload)) return;
             load((await callTool<{ document: Drawing }>('read_drawing', { id: current.current!.plugin.id })).document);
           })}>{t.reload}</MainMenu.Item>
+          <MainMenu.Item icon={<IconLanguage />} title={t.switchLanguageLabel} onSelect={toggleLocale}>{t.switchLanguage}</MainMenu.Item>
           <MainMenu.Separator />
           <MainMenu.DefaultItems.ClearCanvas />
           <MainMenu.DefaultItems.ChangeCanvasBackground />
@@ -299,6 +303,7 @@ export function App() {
       <header className="library-head" aria-label="Agentic Excalidraw">
         <h1>{t.library}</h1>
         {library && <span className="count">{query ? `${matches.length} / ${library.drawings.length}` : library.drawings.length}</span>}
+        <button className="tool" lang={locale === 'en' ? 'zh-CN' : 'en'} title={t.switchLanguageLabel} onClick={toggleLocale}><IconLanguage />{t.switchLanguage}</button>
         <button className="tool icon-button" aria-label={t.refresh} title={t.refresh} disabled={!connected || busy || refreshing} onClick={() => void refreshLibrary()}><IconRefresh className={refreshing ? 'spin' : ''} /></button>
       </header>
       {messages}

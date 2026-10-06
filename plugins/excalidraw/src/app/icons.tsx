@@ -10,4 +10,5 @@ export const IconSearch = svg(<><circle cx="11" cy="11" r="7" /><path d="M20 20l
 export const IconRefresh = svg(<><path d="M20 11a8 8 0 0 0-14.6-4.5L4 8" /><path d="M4 4v4h4" /><path d="M4 13a8 8 0 0 0 14.6 4.5L20 16" /><path d="M20 20v-4h-4" /></>);
 export const IconDownload = svg(<><path d="M12 4v11M7 10l5 5 5-5" /><path d="M5 20h14" /></>);
 export const IconCopy = svg(<><rect x="8" y="8" width="12" height="12" rx="2" /><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" /></>);
+export const IconLanguage = svg(<><circle cx="12" cy="12" r="9" /><path d="M3 12h18M12 3c2.5 2.5 3.5 5.5 3.5 9s-1 6.5-3.5 9c-2.5-2.5-3.5-5.5-3.5-9s1-6.5 3.5-9z" /></>);
 export const IconCanvas = svg(<><rect x="3" y="4" width="18" height="16" rx="3" /><path d="M7 15c2-4 4-4 5-1s3 3 5-2" /></>);
