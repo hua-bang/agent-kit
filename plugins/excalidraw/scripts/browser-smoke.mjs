@@ -136,6 +136,9 @@ try {
   await frame.getByText('没有匹配的图纸。').waitFor();
   await frame.getByRole('button', { name: '清除搜索' }).click();
   await frame.locator('.drawing img').first().waitFor();
+  // A drawing created from chat appears in the open list without pressing refresh.
+  await client.callTool({ name: 'create_drawing', arguments: { title: 'Agent 新建的图', scene: { elements: [{ id: 'agent-box', type: 'rectangle', x: 0, y: 0, width: 160, height: 90 }] } } });
+  await frame.getByRole('button', { name: /Agent 新建的图/ }).waitFor({ timeout: 9000 });
   await page.screenshot({ path: '.test-output/library-mobile.png' });
   await page.setViewportSize({ width: 1200, height: 950 });
   await page.screenshot({ path: '.test-output/library-desktop.png' });
@@ -195,8 +198,12 @@ try {
   const agentRevision = (await titleOf(id)).revision;
   await page.waitForTimeout(1600);
   assert.equal((await titleOf(id)).revision, agentRevision, 'Applying an agent update writes nothing back');
+  // Excalidraw hides zoom controls below 730px, so check the kept viewport on a desktop-width resize.
+  await page.setViewportSize({ width: 850, height: 950 });
+  await page.waitForTimeout(600);
+  assert.equal(await zoomLabel.innerText(), zoomBefore, 'A resize keeps a viewport the user has zoomed');
   await page.setViewportSize({ width: 375, height: 900 });
-  await page.waitForTimeout(400);
+  await page.waitForTimeout(600);
   await page.screenshot({ path: '.test-output/card-mobile.png' });
   assert.equal(await page.frames()[1].evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
   // Long mixed-language names still fit at narrow width.
@@ -228,13 +235,16 @@ try {
   }
   // A drawing wider than the card opens fitted to the view instead of at 100%.
   const wide = (await client.callTool({ name: 'create_drawing', arguments: { title: '很宽的图', scene: { elements: [0, 1, 2, 3].map(i => ({ id: `wide-${i}`, type: 'rectangle', x: i * 900, y: 0, width: 600, height: 300 })) } } })).structuredContent.document;
-  await page.setViewportSize({ width: 1000, height: 950 });
+  await page.setViewportSize({ width: 1200, height: 950 });
   await page.goto(`http://127.0.0.1:${http.address().port}/?drawing=${wide.plugin.id}`);
   await frame.locator('.excalidraw canvas.interactive').first().waitFor();
   await page.waitForTimeout(600);
   const fittedZoom = parseInt(await frame.locator('.reset-zoom-button').innerText(), 10);
   assert.ok(fittedZoom < 100 && fittedZoom >= 10, `Wide drawing opens fitted, got ${fittedZoom}%`);
   await page.screenshot({ path: '.test-output/fit-wide.png' });
+  // Untouched by the user, the view refits when the frame narrows a lot (e.g. a sidebar tab resize).
+  await page.setViewportSize({ width: 800, height: 950 });
+  await until(async () => parseInt(await frame.locator('.reset-zoom-button').innerText(), 10) < fittedZoom, 3000);
   const qa = (await client.callTool({ name: 'create_drawing', arguments: { title: '本地协作流程', scene: { elements } } })).structuredContent.document;
   await page.setViewportSize({ width: 1000, height: 950 });
   await page.goto(`http://127.0.0.1:${http.address().port}/?drawing=${qa.plugin.id}`);

@@ -22,6 +22,14 @@ export function App() {
   const draft = useRef<Scene | null>(null);
   const api = useRef<ExcalidrawImperativeAPI | null>(null);
   const dirty = useRef(false);
+  // Viewport: fit each newly opened drawing, and refit on large resizes only until
+  // the user pans or zooms (sidebar tabs are resized often; their view is theirs).
+  const lastFit = useRef(0);
+  const viewportMoved = useRef(false);
+  function fit(editor: ExcalidrawImperativeAPI) {
+    lastFit.current = Date.now(); viewportMoved.current = false;
+    fitContent(editor);
+  }
   // Excalidraw normalises a scene when it mounts; that first change is not a user edit.
   const baseline = useRef(true);
   const saving = useRef(false);
@@ -105,11 +113,31 @@ export function App() {
       if (Math.abs(window.innerWidth - previousWidth) < 100) return;
       previousWidth = window.innerWidth;
       clearTimeout(timer);
-      timer = setTimeout(() => { if (api.current) fitContent(api.current); }, 150);
+      timer = setTimeout(() => { if (api.current && !viewportMoved.current) fit(api.current); }, 150);
     };
     window.addEventListener('resize', resize);
     return () => { window.removeEventListener('resize', resize); clearTimeout(timer); };
   }, []);
+  // Keep the list current while it is on screen (agents create and edit drawings from chat).
+  // Silent: no spinner or disabled cards, and state only changes when something did.
+  useEffect(() => {
+    if (!connected || !isLibrary || doc) return;
+    let polling = false;
+    const poll = async () => {
+      if (polling || document.visibilityState !== 'visible') return;
+      polling = true;
+      try {
+        const next = await callTool<Library>('list_drawings');
+        if (mounted.current) setLibrary(previous => previous && librarySignature(previous) === librarySignature(next) ? previous : next);
+      } catch { /* The manual refresh button reports errors. */ }
+      finally { polling = false; }
+    };
+    const onVisible = () => { if (document.visibilityState === 'visible') void poll(); };
+    const timer = setInterval(() => void poll(), 5000);
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', onVisible);
+    return () => { clearInterval(timer); document.removeEventListener('visibilitychange', onVisible); window.removeEventListener('focus', onVisible); };
+  }, [connected, doc]);
   async function refreshLibrary() {
     setRefreshing(true);
     try { const data = await callTool<Library>('list_drawings'); if (mounted.current) setLibrary(data); }
@@ -223,12 +251,13 @@ export function App() {
         excalidrawAPI={value => {
           api.current = value;
           // Open each drawing fitted to the visible area (after layout has sized the canvas).
-          requestAnimationFrame(() => requestAnimationFrame(() => { if (api.current === value) fitContent(value); }));
+          requestAnimationFrame(() => requestAnimationFrame(() => { if (api.current === value) fit(value); }));
         }}
         // New shapes and text default to the hand-drawn style: sketchy lines and Virgil
         // (the face this build actually renders, so drawings look the same in Excalidraw).
         initialData={{ ...restore({ ...sceneOf(doc), appState: { ...doc.appState, currentItemFontFamily: 1, currentItemRoughness: 1 } } as unknown as Parameters<typeof restore>[0], null, null) }}
         langCode="zh-CN" autoFocus={false} aiEnabled={false} theme={theme}
+        onScrollChange={() => { if (Date.now() - lastFit.current > 500) viewportMoved.current = true; }}
         onLinkOpen={(_element, event) => event.preventDefault()}
         UIOptions={{ canvasActions: { loadScene: false, saveToActiveFile: false, export: false, saveAsImage: false, toggleTheme: false }, tools: { image: true } }}
         onChange={(elements, appState, files) => {
@@ -333,6 +362,10 @@ function describeView(isLibrary: boolean, doc: Drawing | null, library: Library 
     content: [block(`Excalidraw 图纸库 · ${query ? `${shown.length}/` : ''}${library.drawings.length} 张`, text)],
     structuredContent: { app: 'local-excalidraw', view: 'library', query, total: library.drawings.length, drawings: listed.map(drawing) },
   } };
+}
+
+function librarySignature(library: Library) {
+  return JSON.stringify([library.warnings.length, library.drawings.map(d => [d.id, d.revision, d.title])]);
 }
 
 /** Fit the whole drawing into view, leaving a margin; never zoom small drawings past 100%. */
