@@ -143,6 +143,17 @@ export function App() {
     window.addEventListener('beforeunload', beforeUnload);
     return () => window.removeEventListener('beforeunload', beforeUnload);
   }, []);
+  // Tool calls made by this view never reach the model on their own. Report what
+  // is on screen so the user can refer to "this list" or "this drawing" in chat.
+  // Each update replaces the previous one; hosts without support are skipped.
+  useEffect(() => {
+    if (!connected || !bridge.getHostCapabilities()?.updateModelContext?.text) return;
+    const timer = setTimeout(() => {
+      const context = describeView(isLibrary, editing, doc, library, query);
+      if (context) void bridge.updateModelContext(context).catch(() => {});
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [connected, editing, doc?.plugin.id, doc?.plugin.revision, doc?.plugin.title, library, query]);
 
   async function action(work: () => Promise<void>) {
     setBusy(true); setError('');
@@ -278,6 +289,31 @@ export function App() {
       <span>{connected ? '等待图纸，请让 Agent 打开或新建一张图。' : '连接 MCP 宿主中'}</span>
     </section>}
   </main>;
+}
+
+/** Markdown plus structured data describing the current view, for ui/update-model-context. */
+function describeView(isLibrary: boolean, editing: boolean, doc: Drawing | null, library: Library | null, query: string) {
+  const drawing = (d: DrawingSummary) => ({ id: d.id, title: d.title, revision: d.revision, updatedAt: d.updatedAt });
+  if (doc) {
+    const view = editing ? 'editor' : 'preview';
+    const text = `The user has the local Excalidraw drawing "${doc.plugin.title}" open in the ${view} `
+      + `(id ${doc.plugin.id}, revision ${doc.plugin.revision}, ${doc.elements.filter(e => !e.isDeleted).length} elements). `
+      + 'Call read_drawing with this id for its latest content before describing or changing it; use patch_drawing with the latest revision to edit.'
+      + (editing ? ' The editor autosaves about every 1.2 seconds.' : '');
+    return { content: [{ type: 'text' as const, text }], structuredContent: { app: 'local-excalidraw', view, drawing: drawing(doc.plugin) } };
+  }
+  if (!isLibrary || !library) return null;
+  const needle = query.toLocaleLowerCase();
+  const shown = library.drawings.filter(d => d.title.toLocaleLowerCase().includes(needle));
+  const listed = shown.slice(0, 50);
+  const text = [
+    `The user is viewing the local Excalidraw drawing library: ${library.drawings.length} drawing(s)`
+      + (query ? `, filtered by "${query}" to ${shown.length}` : '') + ', most recently updated first.',
+    ...listed.map(d => `- "${d.title}" (id ${d.id}, revision ${d.revision}, updated ${d.updatedAt})`),
+    ...(shown.length > listed.length ? [`- …and ${shown.length - listed.length} more; call list_drawings for all.`] : []),
+    'Call read_drawing with an id to see a drawing\'s content.',
+  ].join('\n');
+  return { content: [{ type: 'text' as const, text }], structuredContent: { app: 'local-excalidraw', view: 'library', query, total: library.drawings.length, drawings: listed.map(drawing) } };
 }
 
 /** A host-fixed height (sidebar, fullscreen) means the editor should fit it, not grow past it. */

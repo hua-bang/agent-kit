@@ -108,6 +108,11 @@ try {
   await frame.getByRole('button', { name: '图纸列表', exact: true }).click();
   await frame.getByRole('button', { name: /独立副本/ }).waitFor();
   assert.equal(await frame.getByText('已打开独立副本，原图保持不变。').count(), 0, 'Copy notice does not linger on the list');
+  // The library reports its visible drawings to the model (ui/update-model-context).
+  await page.waitForFunction(() => window.modelContext?.structuredContent?.view === 'library' && window.modelContext.structuredContent.total === 2);
+  const libraryContext = await page.evaluate(() => window.modelContext);
+  assert.match(libraryContext.content[0].text, /独立副本/);
+  assert.ok(libraryContext.structuredContent.drawings.some(d => d.id === copy.id), 'Model context lists drawing IDs');
   await frame.getByLabel('搜索图纸').fill('不存在的图纸');
   await frame.getByText('没有匹配的图纸。').waitFor();
   await frame.getByRole('button', { name: '清除搜索' }).click();
@@ -135,6 +140,8 @@ try {
   await page.waitForTimeout(250);
   assert.equal(await frame.getByRole('heading', { name: '浏览器实际编辑验证', exact: true }).count(), 1);
   await frame.getByRole('button', { name: '展开编辑', exact: true }).click();
+  // The open drawing, not a library, is what the card reports to the model.
+  await page.waitForFunction(id => window.modelContext?.structuredContent?.view === 'editor' && window.modelContext.structuredContent.drawing.id === id, id);
   await frame.getByLabel('图纸名称', { exact: true }).fill('对话编辑后的图纸');
   assert.equal(await frame.getByRole('button', { name: '图纸列表', exact: true }).count(), 0);
   await frame.getByRole('button', { name: '返回预览', exact: true }).click();
