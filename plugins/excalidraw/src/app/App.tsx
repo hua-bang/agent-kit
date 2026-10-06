@@ -13,18 +13,17 @@ export function App() {
   // Entry surface is assigned by the resource, never inferred from a session or viewport.
   const isLibrary = document.querySelector('meta[name="excalidraw-surface"]')?.getAttribute('content') === 'library';
   const boundId = useRef<string | null>(null);
-  const [editing, setEditing] = useState(isLibrary);
   const [limit, setLimit] = useState(20);
   const [refreshing, setRefreshing] = useState(false);
   const [notice, setNotice] = useState('');
-  const expandButton = useRef<HTMLButtonElement>(null);
-  const titleInput = useRef<HTMLInputElement>(null);
   const [connected, setConnected] = useState(false);
   const [doc, setDoc] = useState<Drawing | null>(null);
   const current = useRef<Drawing | null>(null);
   const draft = useRef<Scene | null>(null);
   const api = useRef<ExcalidrawImperativeAPI | null>(null);
   const dirty = useRef(false);
+  // Excalidraw normalises a scene when it mounts; that first change is not a user edit.
+  const baseline = useRef(true);
   const saving = useRef(false);
   const editCounter = useRef(0);
   const conflict = useRef(false);
@@ -45,6 +44,7 @@ export function App() {
 
   function load(next: Drawing) {
     current.current = next; draft.current = sceneOf(next); dirty.current = false; conflict.current = false;
+    baseline.current = true;
     editCounter.current++; api.current = null;
     setDoc(next); setTitle(next.plugin.title); setError(''); setStatus(`已保存 · r${next.plugin.revision}`);
     setEditorKey(k => k + 1);
@@ -154,14 +154,14 @@ export function App() {
   useEffect(() => {
     if (!connected || !bridge.getHostCapabilities()?.updateModelContext?.text) return;
     const timer = setTimeout(() => {
-      const context = describeView(isLibrary, editing, doc, library, query);
+      const context = describeView(isLibrary, doc, library, query);
       if (!context || context.key === dismissedContext.current) return;
       dismissedContext.current = null;
       sentContext.current = context.key;
       void bridge.updateModelContext(context.params).catch(() => {});
     }, 400);
     return () => clearTimeout(timer);
-  }, [connected, editing, doc?.plugin.id, doc?.plugin.revision, doc?.plugin.title, library, query]);
+  }, [connected, doc?.plugin.id, doc?.plugin.revision, doc?.plugin.title, library, query]);
 
   async function action(work: () => Promise<void>) {
     setBusy(true); setError('');
@@ -182,16 +182,7 @@ export function App() {
     if (dirty.current || saving.current) throw new Error('请先保存修改，或导出草稿后重新载入。');
     api.current = null;
     setNotice(''); // Notices describe the editor session; do not carry them back to the list.
-    if (isLibrary) {
-      current.current = null; setDoc(null); setLibrary(null); await refreshLibrary();
-    } else {
-      setEditing(false);
-      requestAnimationFrame(() => expandButton.current?.focus());
-    }
-  }
-  function expand() {
-    setEditing(true);
-    requestAnimationFrame(() => titleInput.current?.focus());
+    current.current = null; setDoc(null); setLibrary(null); await refreshLibrary();
   }
   const matches = library?.drawings.filter(d => d.title.toLocaleLowerCase().includes(query.toLocaleLowerCase())) ?? [];
   const tone = /暂停|未连接|失败/.test(status) ? 'error' : /正在保存|未保存/.test(status) ? 'pending' : /已保存/.test(status) ? 'ok' : 'idle';
@@ -200,12 +191,13 @@ export function App() {
     {error && <div className="banner error" role="alert"><span>{error}</span>{!doc && connected && isLibrary && <button className="tool" onClick={() => void refreshLibrary()}>重试</button>}</div>}
     {notice && <div className="banner notice" role="status">{notice}</div>}
   </>;
-  return <main className={`app ${isLibrary ? 'library-surface' : 'drawing-surface'} ${doc && editing ? 'is-editing' : ''}`}>
+  // A drawing always opens in the editor: the library enters it from the list, a conversation card shows it directly.
+  return <main className={`app ${isLibrary ? 'library-surface' : 'drawing-surface'} ${doc ? 'is-editing' : ''}`}>
     <a className="skip-link" href="#main-content">跳到图纸内容</a>
-    {doc && editing ? <>
+    {doc ? <>
       <header className="editor-bar">
-        <button className="ghost back" disabled={busy} onClick={() => void action(leaveEditor)}><IconBack />{isLibrary ? '图纸列表' : '返回预览'}</button>
-        <input ref={titleInput} aria-label="图纸名称" className="title" value={title} maxLength={160} onChange={e => { setTitle(e.target.value); changed(); }} />
+        {isLibrary && <button className="ghost back" disabled={busy} onClick={() => void action(leaveEditor)}><IconBack />图纸列表</button>}
+        <input aria-label="图纸名称" className="title" value={title} maxLength={160} onChange={e => { setTitle(e.target.value); changed(); }} />
         {statusPill}
         {/* Autosave covers the normal case; the button only appears while work is unsaved or paused. */}
         {(tone === 'pending' || tone === 'error') && <button className="tool save" disabled={busy} onClick={() => { conflict.current = false; void save(); }}>保存</button>}
@@ -221,6 +213,7 @@ export function App() {
         onChange={(elements, appState, files) => {
           try {
             const scene = sceneSchema.parse({ elements, appState, files });
+            if (baseline.current) { baseline.current = false; draft.current = scene; return; }
             if (JSON.stringify(scene) !== JSON.stringify(draft.current)) {
               draft.current = scene; changed();
             }
@@ -245,20 +238,6 @@ export function App() {
           <MainMenu.DefaultItems.ChangeCanvasBackground />
         </MainMenu>
       </Excalidraw>
-      </section>
-    </> : doc ? <>
-      {messages}
-      <section id="main-content" className="card" aria-label="图纸预览">
-        <button className="preview-open" onClick={expand} aria-label={`展开编辑 ${doc.plugin.title}`}>
-          <Preview document={doc} dark={theme === 'dark'} />
-        </button>
-        <div className="card-bar">
-          <div className="heading">
-            <h1>{doc.plugin.title}</h1>
-            <span className="meta">更新于 {relativeTime(doc.plugin.updatedAt)}</span>
-          </div>
-          <button ref={expandButton} className="primary" onClick={expand}>展开编辑</button>
-        </div>
       </section>
     </> : isLibrary ? <>
       <header className="library-head">
@@ -304,15 +283,15 @@ export function App() {
  * `key` identifies the view (not its contents) so a removed attachment stays removed until it changes.
  * `openai/title` labels the composer attachment on OpenAI hosts; other hosts ignore it.
  */
-function describeView(isLibrary: boolean, editing: boolean, doc: Drawing | null, library: Library | null, query: string) {
+function describeView(isLibrary: boolean, doc: Drawing | null, library: Library | null, query: string) {
   const block = (title: string, text: string) => ({ type: 'text' as const, text, _meta: { 'openai/title': title } });
   const drawing = (d: DrawingSummary) => ({ id: d.id, title: d.title, revision: d.revision, updatedAt: d.updatedAt });
   if (doc) {
-    const view = editing ? 'editor' : 'preview';
-    const text = `The user has the local Excalidraw drawing "${doc.plugin.title}" open in the ${view} `
+    const view = 'editor';
+    const text = `The user has the local Excalidraw drawing "${doc.plugin.title}" open in the editor `
       + `(id ${doc.plugin.id}, revision ${doc.plugin.revision}, ${doc.elements.filter(e => !e.isDeleted).length} elements). `
       + 'Call read_drawing with this id for its latest content before describing or changing it; use patch_drawing with the latest revision to edit.'
-      + (editing ? ' The editor autosaves about every 1.2 seconds.' : '');
+      + ' The editor autosaves about every 1.2 seconds.';
     return { key: `${view}:${doc.plugin.id}`, params: {
       content: [block(`Excalidraw · ${doc.plugin.title}`, text)],
       structuredContent: { app: 'local-excalidraw', view, drawing: drawing(doc.plugin) },

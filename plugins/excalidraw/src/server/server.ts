@@ -91,7 +91,7 @@ export function createServer(store = new DrawingStore(), htmlPath = new URL('../
     inputSchema: { id: idSchema }, annotations: readonly,
   }, ({ id }) => guarded(async () => ({ document: await store.read(id) })));
   registerAppTool(server, 'create_drawing', {
-    description: 'Create a local drawing and show its fixed-ID preview. Expand the preview to edit. Optional scene contains Excalidraw elements; omit for a blank canvas.',
+    description: 'Create a local drawing and show it as a fixed-ID card that opens straight in the editor. Optional scene contains Excalidraw elements; omit for a blank canvas.',
     inputSchema: { title: titleSchema, scene: sceneSchema.optional() }, annotations: writable, _meta: { ui },
   }, ({ title, scene }) => guarded(async () => ({ document: await store.create(title, scene) })));
   server.registerTool('save_drawing', {

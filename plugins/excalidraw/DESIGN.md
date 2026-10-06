@@ -2,7 +2,7 @@
 
 ## 1. Direction
 
-Look like Excalidraw itself: the shell reuses the editor's UI tokens (violet primary, `surface-low` gray buttons, white "island" panels with the island shadow), so chrome and canvas read as one product. Keep it lean: one heading with a count, one toolbar row, cards with a thumbnail, a title and a time. No decorative marks, hover hints or revision numbers in lists. Chrome follows the host theme (`hostContext.theme`, falling back to `prefers-color-scheme`) and passes it to the editor and preview export.
+Look like Excalidraw itself: the shell reuses the editor's UI tokens (violet primary, `surface-low` gray buttons, white "island" panels with the island shadow), so chrome and canvas read as one product. Keep it lean: one heading with a count, one toolbar row, cards with a thumbnail, a title and a time. No decorative marks, hover hints or revision numbers in lists. Chrome follows the host theme (`hostContext.theme`, falling back to `prefers-color-scheme`) and passes it to the editor and thumbnail export.
 
 ## 2. Palette
 
@@ -31,16 +31,16 @@ System stack with PingFang SC / YaHei fallback, no added web fonts (Excalifont o
 - Count: a violet-tinted badge beside the library heading; while searching it reads `matches / total`.
 - Save state: an 8px coloured dot plus label.
 - Library cards: island panels with the island shadow and an 8px radius, 16:10 thumbnail on the canvas colour rendered lazily by the SDK as a `data:` PNG (host CSPs commonly allow `data:` but not `blob:` images), title and relative time. Hover outlines the card in primary.
-- Preview failures never prevent opening the editor.
+- Thumbnail failures never prevent opening the editor.
 
 ## 5. Layout and identity
 
-- Drawing resource: fixed-ID preview, then explicit expand to edit, then return to that same preview. No list, new-drawing or ID-switch control inside a conversation card.
+- Drawing resource: a fixed-ID card that is the editor itself, with a header of title and save state only. There is no separate preview state. No list, new-drawing or ID-switch control inside a conversation card.
 - Library resource: search/create/list, then full-width editor with return to list. Copy creates a new UUID and opens the independent copy.
 - Both resources serve the same UI bundle with a server-assigned surface marker. Surface is not inferred from viewport width, MCP connection or a global last-opened drawing.
 - `open_library` is an explicit library request intended for Sidebar. A host may render this dedicated resource inline when Sidebar is unavailable; it is not reachable from a drawing card. The plugin cannot force a host to place a resource in its Sidebar.
 - No stable host conversation ID is assumed. The Agent carries drawing IDs explicitly in conversation context. A drawing card binds to the first document result and ignores unrelated results.
-- Return waits for a successful save. Conflicted drafts remain editable and exportable. Preview-only opening does not write a new revision.
+- Returning to the library list waits for a successful save. Conflicted drafts remain editable and exportable. Opening a drawing without editing does not write a new revision: the editor's first change after a load is Excalidraw's mount-time normalisation and is taken as the baseline.
 
 ## 6. Depth
 
@@ -52,7 +52,7 @@ Use real Excalidraw rendering and editing, never a mock canvas. Do not introduce
 
 ## 8. Responsive and motion
 
-At 640px and below, the library toolbar stacks search above create. At 560px and below, the library grid becomes two columns; the card's expand button spans the full width; preview height becomes 240px (320px normally) and editor height 520px (600px normally). 150ms colour transitions and the pending pulse are disabled under reduced motion. Excalidraw's native compact toolbar is retained. The app fills the frame height: `html`/`body`/`#root` are 100% and the editor, card preview and library grow into spare space. The App SDK measures `<html>` at `max-content`, so the reported auto-resize height stays the natural one (600px editor, 320px preview). When the host context reports a fixed `containerDimensions.height` or fullscreen mode, `data-fill` is set on `<html>` and the editor shrinks to fit (minimum 320px) instead of overflowing. Browser regression checks 375px layout and long Chinese/English names. Actual Codex Sidebar sizing remains a host acceptance task.
+At 640px and below, the library toolbar stacks search above create. At 560px and below, the library grid becomes two columns and the editor height becomes 520px (600px normally). 150ms colour transitions and the pending pulse are disabled under reduced motion. Excalidraw's native compact toolbar is retained. The app fills the frame height: `html`/`body`/`#root` are 100% and the editor and library grow into spare space. The App SDK measures `<html>` at `max-content`, so the reported auto-resize height stays the natural one (600px editor). When the host context reports a fixed `containerDimensions.height` or fullscreen mode, `data-fill` is set on `<html>` and the editor shrinks to fit (minimum 320px) instead of overflowing. Browser regression checks 375px layout and long Chinese/English names. Actual Codex Sidebar sizing remains a host acceptance task.
 
 ## 9. Follow-up implementation prompts
 

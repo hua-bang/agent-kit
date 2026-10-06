@@ -41,6 +41,12 @@ try {
   await page.goto(`http://127.0.0.1:${http.address().port}`);
   const frame = page.frameLocator('iframe');
   // Drawing actions live in Excalidraw's main menu, not the header.
+  const until = async (check, timeout = 9000) => {
+    for (const end = Date.now() + timeout; !(await check());) {
+      if (Date.now() > end) throw new Error('Timed out waiting for condition');
+      await new Promise(resolve => setTimeout(resolve, 200));
+    }
+  };
   const menuItem = async name => {
     await frame.locator('[data-testid="main-menu-trigger"]').click();
     return frame.getByRole('button', { name, exact: true });
@@ -132,65 +138,60 @@ try {
   await page.screenshot({ path: '.test-output/library-desktop.png' });
   saved = (await client.callTool({ name: 'read_drawing', arguments: { id } })).structuredContent.document;
   assert.equal(saved.plugin.title, '浏览器实际编辑验证');
-  const revisionBeforePreview = saved.plugin.revision;
+  const revisionBeforeOpen = saved.plugin.revision;
+  const titleOf = async drawingId => (await client.callTool({ name: 'read_drawing', arguments: { id: drawingId } })).structuredContent.document.plugin;
+  const titleInput = frame.getByLabel('图纸名称', { exact: true });
 
-  // Conversation entry is a preview, never a library or live editor.
+  // A conversation card opens the drawing straight in the editor: no preview step, library or back button.
   await page.goto(`http://127.0.0.1:${http.address().port}/?drawing=${id}`);
-  await frame.getByRole('button', { name: '展开编辑', exact: true }).waitFor();
-  await frame.locator('.scene-preview img').waitFor();
+  await titleInput.waitFor({ timeout: 12000 });
+  await frame.locator('.excalidraw canvas.interactive').first().waitFor();
   assert.equal(await frame.getByLabel('图纸库', { exact: true }).count(), 0);
-  assert.equal(await frame.locator('.excalidraw').count(), 0);
-  await page.waitForTimeout(1600);
-  assert.equal((await client.callTool({ name: 'read_drawing', arguments: { id } })).structuredContent.document.plugin.revision, revisionBeforePreview, 'Opening preview never writes a revision');
-  await page.screenshot({ path: '.test-output/preview-desktop.png' });
+  assert.equal(await frame.getByRole('button', { name: '图纸列表', exact: true }).count(), 0);
+  assert.equal(await frame.locator('.scene-preview').count(), 0);
+  // The open drawing is what the card reports to the model.
+  await page.waitForFunction(id => window.modelContext?.structuredContent?.view === 'editor' && window.modelContext.structuredContent.drawing.id === id, id);
+  // Excalidraw normalises a scene when it mounts; opening without editing must not write a revision.
+  await page.waitForTimeout(2600);
+  assert.equal((await titleOf(id)).revision, revisionBeforeOpen, 'Opening a drawing never writes a revision');
+  assert.equal(await frame.getByRole('button', { name: '保存', exact: true }).count(), 0, 'No save button while nothing is unsaved');
+  await page.screenshot({ path: '.test-output/card-desktop.png' });
   // A host delivering unrelated tool results must not retarget this card.
   const otherResult = await client.callTool({ name: 'read_drawing', arguments: { id: copy.id } });
   await page.evaluate(result => window.deliverResult(result), otherResult);
   await page.evaluate(() => window.deliverResult({ content: [], structuredContent: { view: 'library' } }));
   await page.waitForTimeout(250);
-  assert.equal(await frame.getByRole('heading', { name: '浏览器实际编辑验证', exact: true }).count(), 1);
-  await frame.getByRole('button', { name: '展开编辑', exact: true }).click();
-  // The open drawing, not a library, is what the card reports to the model.
-  await page.waitForFunction(id => window.modelContext?.structuredContent?.view === 'editor' && window.modelContext.structuredContent.drawing.id === id, id);
-  await frame.getByLabel('图纸名称', { exact: true }).fill('对话编辑后的图纸');
-  assert.equal(await frame.getByRole('button', { name: '图纸列表', exact: true }).count(), 0);
-  await frame.getByRole('button', { name: '返回预览', exact: true }).click();
-  await frame.getByRole('heading', { name: '对话编辑后的图纸', exact: true }).waitFor();
+  assert.equal(await titleInput.inputValue(), '浏览器实际编辑验证');
+  // Edits in the card autosave to the same drawing; the copy is untouched.
+  await titleInput.fill('对话编辑后的图纸');
+  await until(async () => (await titleOf(id)).title === '对话编辑后的图纸');
+  assert.equal((await titleOf(copy.id)).title, '独立副本');
+  // An Agent save reaches the open editor while it has no unsaved edits, without switching drawings.
   const afterEdit = (await client.callTool({ name: 'read_drawing', arguments: { id } })).structuredContent.document;
-  assert.equal(afterEdit.plugin.title, '对话编辑后的图纸');
-  assert.equal((await client.callTool({ name: 'read_drawing', arguments: { id: copy.id } })).structuredContent.document.plugin.title, '独立副本');
-  // Latest revision propagates to the same preview without a remount or ID switch.
   await client.callTool({ name: 'save_drawing', arguments: { id, expectedRevision: afterEdit.plugin.revision, title: 'Agent 更新后的图纸', scene: { elements: afterEdit.elements, appState: afterEdit.appState, files: afterEdit.files } } });
-  await frame.getByRole('heading', { name: 'Agent 更新后的图纸', exact: true }).waitFor({ timeout: 9000 });
+  await until(async () => (await titleInput.inputValue()) === 'Agent 更新后的图纸');
   await page.setViewportSize({ width: 375, height: 900 });
-  await frame.locator('.scene-preview img').waitFor();
-  await page.screenshot({ path: '.test-output/preview-mobile.png' });
+  await page.waitForTimeout(400);
+  await page.screenshot({ path: '.test-output/card-mobile.png' });
   assert.equal(await page.frames()[1].evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
   // Long mixed-language names still fit at narrow width.
-  await frame.getByRole('button', { name: '展开编辑', exact: true }).click();
-  await frame.getByLabel('图纸名称', { exact: true }).fill('Architecture系统设计'.repeat(8));
-  await frame.getByRole('button', { name: '返回预览', exact: true }).click();
-  await frame.getByRole('button', { name: '展开编辑', exact: true }).waitFor();
+  await titleInput.fill('Architecture系统设计'.repeat(8));
   assert.equal(await page.frames()[1].evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
-  await page.screenshot({ path: '.test-output/preview-long-title.png' });
-  // A stale edit stays in the editor; return cannot discard it silently.
-  await frame.getByRole('button', { name: '展开编辑', exact: true }).click();
+  await page.screenshot({ path: '.test-output/card-long-title.png' });
+  // A stale edit stays in the editor and can still be exported; reload asks before discarding it.
   await page.waitForTimeout(1600);
   const conflictBase = (await client.callTool({ name: 'read_drawing', arguments: { id } })).structuredContent.document;
-  await frame.getByLabel('图纸名称', { exact: true }).fill('尚未保存的冲突草稿');
+  await titleInput.fill('尚未保存的冲突草稿');
   await client.callTool({ name: 'patch_drawing', arguments: { id, expectedRevision: conflictBase.plugin.revision, upsert: [{ id: 'concurrent', type: 'rectangle', x: 700, y: 30, width: 100, height: 70 }] } });
   await frame.getByRole('button', { name: '保存', exact: true }).click();
   await frame.getByRole('alert').waitFor();
-  await frame.getByRole('button', { name: '返回预览', exact: true }).click();
-  assert.equal(await frame.getByLabel('图纸名称', { exact: true }).inputValue(), '尚未保存的冲突草稿');
+  assert.equal(await titleInput.inputValue(), '尚未保存的冲突草稿');
   const downloadWait = page.waitForEvent('download');
   await (await menuItem('导出')).click();
   assert.ok((await downloadWait).suggestedFilename().endsWith('.excalidraw'));
   page.once('dialog', dialog => dialog.accept());
   await (await menuItem('重新载入')).click();
   await page.waitForTimeout(500);
-  await frame.getByRole('button', { name: '返回预览', exact: true }).click();
-  await frame.getByRole('button', { name: '展开编辑', exact: true }).waitFor();
 
   // Use a deliberately composed fixture for visual QA, not overlapping paste-regression text.
   const elements = [];
@@ -203,20 +204,18 @@ try {
   const qa = (await client.callTool({ name: 'create_drawing', arguments: { title: '本地协作流程', scene: { elements } } })).structuredContent.document;
   await page.setViewportSize({ width: 1000, height: 950 });
   await page.goto(`http://127.0.0.1:${http.address().port}/?drawing=${qa.plugin.id}`);
-  await frame.locator('.scene-preview img').waitFor();
-  await page.screenshot({ path: '.test-output/qa-preview-desktop.png' });
-  await page.setViewportSize({ width: 375, height: 900 });
-  await page.screenshot({ path: '.test-output/qa-preview-mobile.png' });
-  await frame.getByRole('button', { name: '展开编辑', exact: true }).click();
   await frame.locator('.excalidraw canvas.interactive').first().waitFor();
   await page.waitForTimeout(600);
-  await page.screenshot({ path: '.test-output/qa-editor-mobile.png' });
+  await page.screenshot({ path: '.test-output/qa-card-desktop.png' });
+  await page.setViewportSize({ width: 375, height: 900 });
+  await page.waitForTimeout(600);
+  await page.screenshot({ path: '.test-output/qa-card-mobile.png' });
   await page.goto(`http://127.0.0.1:${http.address().port}`);
   await frame.locator('.drawing img').first().waitFor();
   await page.screenshot({ path: '.test-output/qa-library-mobile.png' });
   assert.deepEqual(errors, [], 'No uncaught browser errors');
   assert.deepEqual(external, [], 'No external network requests');
-  console.log('PASS: sandboxed official MCP App bridge, real Excalidraw pointer edit, autosave, Mermaid menu removal and Mermaid/plain-text paste, agent patch, reopen, 375px overflow, library thumbnails/search/copy, fixed-ID conversation preview/edit/return, live preview updates, no external requests');
+  console.log('PASS: sandboxed official MCP App bridge, real Excalidraw pointer edit, autosave, Mermaid menu removal and Mermaid/plain-text paste, agent patch, reopen, 375px overflow, library thumbnails/search/copy, fixed-ID conversation card opening straight in the editor without writing, card autosave, live agent updates, no external requests');
 } finally {
   await browser?.close(); await client.close(); if (http) await new Promise(resolve => http.close(resolve));
   await rm(dir, { recursive: true, force: true });

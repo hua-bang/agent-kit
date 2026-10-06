@@ -24,7 +24,7 @@ Tool names may be prefixed by the host's server name. This portable Agent Plugin
 ## Drawing workflow
 
 1. For existing drawings, use `list_drawings` to discover an ID, then `read_drawing` to read the latest scene and revision. Never invent a drawing ID.
-2. Use `open_drawing` to show a fixed-ID preview; the user expands it to edit and returns to the same drawing. There is no library switcher in this card. Use `open_library` only for an explicit library request; its separate resource is intended for Sidebar but host placement can vary. The drawing App works without Sidebar support.
+2. Use `open_drawing` to show a fixed-ID drawing card; it opens straight in the editor and autosaves the user's edits to that drawing. There is no library switcher in this card. Use `open_library` only for an explicit library request; its separate resource is intended for Sidebar but host placement can vary. The drawing App works without Sidebar support.
    Keep the current drawing ID explicitly in this conversation. Continue that ID unless asked to create, switch or copy. Never infer it from a global most-recent drawing or MCP connection ID. To copy, read the latest scene then create a new drawing with it; existing cards stay attached to the original ID.
 3. To create a drawing, call `create_drawing` with a title and optionally an Excalidraw scene. Keep element IDs unique and stable. Use standard Excalidraw element fields, not arbitrary diagram DSLs.
 4. To modify existing elements, retain all their fields and only change what the user requested. Prefer `patch_drawing` with complete upsert elements and `expectedRevision` from the latest read. Untouched elements and local image files are retained.
