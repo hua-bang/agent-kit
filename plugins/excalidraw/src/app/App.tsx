@@ -246,7 +246,7 @@ export function App() {
         {(tone === 'pending' || tone === 'error') && <button className="tool save" disabled={busy} onClick={() => { conflict.current = false; void save(); }}>保存</button>}
       </header>
       {messages}
-      <section id="main-content" className="editor" aria-label="Excalidraw 编辑器">
+      <section id="main-content" className="editor" aria-label="Agentic Excalidraw 编辑器">
       <Excalidraw key={editorKey}
         excalidrawAPI={value => {
           api.current = value;
@@ -290,7 +290,7 @@ export function App() {
       </Excalidraw>
       </section>
     </> : isLibrary ? <>
-      <header className="library-head">
+      <header className="library-head" aria-label="Agentic Excalidraw">
         <h1>图纸库</h1>
         {library && <span className="count">{query ? `${matches.length} / ${library.drawings.length}` : library.drawings.length}</span>}
         <button className="tool icon-button" aria-label="刷新" title="刷新" disabled={!connected || busy || refreshing} onClick={() => void refreshLibrary()}><IconRefresh className={refreshing ? 'spin' : ''} /></button>
@@ -338,12 +338,12 @@ function describeView(isLibrary: boolean, doc: Drawing | null, library: Library 
   const drawing = (d: DrawingSummary) => ({ id: d.id, title: d.title, revision: d.revision, updatedAt: d.updatedAt });
   if (doc) {
     const view = 'editor';
-    const text = `The user has the local Excalidraw drawing "${doc.plugin.title}" open in the editor `
+    const text = `The user has the Agentic Excalidraw drawing "${doc.plugin.title}" open in the editor `
       + `(id ${doc.plugin.id}, revision ${doc.plugin.revision}, ${doc.elements.filter(e => !e.isDeleted).length} elements). `
       + 'Call read_drawing with this id for its latest content before describing or changing it; use patch_drawing with the latest revision to edit.'
       + ' The editor autosaves about every 1.2 seconds.';
     return { key: `${view}:${doc.plugin.id}`, params: {
-      content: [block(`Excalidraw · ${doc.plugin.title}`, text)],
+      content: [block(`Agentic Excalidraw · ${doc.plugin.title}`, text)],
       structuredContent: { app: 'local-excalidraw', view, drawing: drawing(doc.plugin) },
     } };
   }
@@ -352,14 +352,14 @@ function describeView(isLibrary: boolean, doc: Drawing | null, library: Library 
   const shown = library.drawings.filter(d => d.title.toLocaleLowerCase().includes(needle));
   const listed = shown.slice(0, 50);
   const text = [
-    `The user is viewing the local Excalidraw drawing library: ${library.drawings.length} drawing(s)`
+    `The user is viewing the Agentic Excalidraw drawing library: ${library.drawings.length} drawing(s)`
       + (query ? `, filtered by "${query}" to ${shown.length}` : '') + ', most recently updated first.',
     ...listed.map(d => `- "${d.title}" (id ${d.id}, revision ${d.revision}, updated ${d.updatedAt})`),
     ...(shown.length > listed.length ? [`- …and ${shown.length - listed.length} more; call list_drawings for all.`] : []),
     'Call read_drawing with an id to see a drawing\'s content.',
   ].join('\n');
   return { key: `library:${query}`, params: {
-    content: [block(`Excalidraw 图纸库 · ${query ? `${shown.length}/` : ''}${library.drawings.length} 张`, text)],
+    content: [block(`Agentic Excalidraw 图纸库 · ${query ? `${shown.length}/` : ''}${library.drawings.length} 张`, text)],
     structuredContent: { app: 'local-excalidraw', view: 'library', query, total: library.drawings.length, drawings: listed.map(drawing) },
   } };
 }

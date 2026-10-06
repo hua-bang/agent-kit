@@ -1,12 +1,14 @@
 ---
 name: excalidraw
-description: Create, open and edit local Excalidraw drawings, architecture diagrams and flowcharts with the bundled local-excalidraw MCP App. Use when the user asks to draw, open or list the drawing library, asks what is in a saved drawing or in "the list" / "this page" while the Excalidraw library or a drawing is open (e.g. 图纸库、列表、这张图), or continues editing a saved diagram while preserving manual changes.
+description: Create, open and edit local Excalidraw drawings, architecture diagrams and flowcharts with Agentic Excalidraw, the bundled local-excalidraw MCP App. Use when the user asks to draw, open or list the drawing library, asks what is in a saved drawing or in "the list" / "this page" while the Excalidraw library or a drawing is open (e.g. 图纸库、列表、这张图), or continues editing a saved diagram while preserving manual changes.
 compatibility: Requires this plugin's local-excalidraw stdio MCP server and Node.js 22+. Interactive editing requires an MCP Apps host; Sidebar is optional.
 metadata:
   version: "0.1.0"
 ---
 
-# Local Excalidraw
+# Agentic Excalidraw
+
+An unofficial plugin, not affiliated with or endorsed by the Excalidraw team.
 
 Requires this plugin's MCP server, configured according to [README](../../README.md).
 Tool names may be prefixed by the host's server name. This portable Agent Plugins package discovers the skill from `skills/` and the server from root `mcp.json`; installing only this skill does not install its server.

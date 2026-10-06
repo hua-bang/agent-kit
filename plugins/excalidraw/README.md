@@ -1,6 +1,10 @@
-# Local Excalidraw MCP App
+# Agentic Excalidraw
 
-本地优先的 Excalidraw 插件开发版：Node.js stdio MCP Server + React Excalidraw 编辑器 + 官方 MCP Apps bridge。
+供用户与 Agent 共同编辑图纸的本地优先插件：Node.js stdio MCP Server + React Excalidraw 编辑器 + 官方 MCP Apps bridge。
+本项目为非官方插件，与 Excalidraw 官方团队无隶属关系，也未获其背书。
+
+展示名称为 **Agentic Excalidraw**；插件 ID `excalidraw`、MCP 服务标识 `local-excalidraw`、安装命令和图纸目录保持不变。
+
 不依赖原有 `excalidraw-diagrams` 的代码或远端服务。不需要数据库、常驻 HTTP 服务或全栈框架。
 
 ## 当前状态
@@ -115,7 +119,7 @@ npm run test:stdio
 
 图纸身份是永久 UUID，不是会话 ID 或 MCP 连接 ID。卡片绑定首次收到的图纸 ID，忽略其他图纸结果与旧修订；同 ID 默认展示最新内容。未建立宿主会话数据库，Agent 通过上下文显式传递 ID。图纸库编辑器左上角菜单（☰）里的「复制为新图」生成独立 UUID，原图与旧卡片不改变。
 
-界面自己调用工具（加载列表、读图）的结果不会自动进入 AI 上下文。宿主声明支持 `ui/update-model-context` 时，界面会把当前视图告诉模型：图纸库中可见图纸的名称、ID、修订号，或正在编辑的图纸 ID 与修订号；每次更新覆盖上一次，不触发回复。宿主不支持时，随包 skill 会让 Agent 先调用 `list_drawings` / `read_drawing`。上下文属于该界面所在的对话，另开的对话线程不一定能看到。在 OpenAI 桌面端，上下文显示为输入框里可移除的附件（带「Excalidraw 图纸库 · N 张」或「Excalidraw · 图名」标题）；用户移除后，在切换到其他视图或搜索前不会重新附加。
+界面自己调用工具（加载列表、读图）的结果不会自动进入 AI 上下文。宿主声明支持 `ui/update-model-context` 时，界面会把当前视图告诉模型：图纸库中可见图纸的名称、ID、修订号，或正在编辑的图纸 ID 与修订号；每次更新覆盖上一次，不触发回复。宿主不支持时，随包 skill 会让 Agent 先调用 `list_drawings` / `read_drawing`。上下文属于该界面所在的对话，另开的对话线程不一定能看到。在 OpenAI 桌面端，上下文显示为输入框里可移除的附件（带「Agentic Excalidraw 图纸库 · N 张」或「Agentic Excalidraw · 图名」标题）；用户移除后，在切换到其他视图或搜索前不会重新附加。
 
 在任意对话中，可通过输入框 `@` 搜索并引用图纸（OpenAI MCP 扩展 `mentions/search`，由 `mention_drawings` 提供，模型不可直接调用）。引用以 `excalidraw://drawings/<id>` 资源链接附上；该资源返回完整图纸 JSON，所有图纸也列在 `resources/list` 中。`@` 选择器由宿主提供，本地测试只覆盖搜索结果与资源读取。
 
