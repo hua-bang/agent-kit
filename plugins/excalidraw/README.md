@@ -185,6 +185,10 @@ npm run test:browser
 该入口使用 `ui://excalidraw/library.html`，先进入图纸列表，再进入详情。对话图纸使用 `ui://excalidraw/editor.html`，直接进入编辑器。两者共用真实数据与构建包，不支持该扩展的宿主会忽略这项元数据。
 参考 [OpenAI Extensions](https://developers.openai.com/plugins/build/extensions) 及其规范 [openai/mcp-extensions](https://github.com/openai/mcp-extensions/blob/main/docs/spec.md)。尚未在真实宿主中验证侧边栏显示与图标。
 
+## 宣传素材
+
+`promo/` 保存宣传片与官网的生成脚本、案例和页面源码，用真实插件录制，产物写入被忽略的 `promo/out/`。说明见 [promo/README.md](promo/README.md)，通用做法见 [mcp-app-promo skill](../../skills/mcp-app-promo/SKILL.md)。`promo/` 不在 release 打包范围内。
+
 ## 安全与发布限制
 
 预构建版本通过 `release` 分支分发；桌面宿主中的画板渲染尚未在真实 Codex 对话中验收。
