@@ -1,9 +1,11 @@
 ---
 name: mcp-app-promo
-description: Make a narrated promo video and a simple landing page for an MCP Apps plugin from real recordings of the plugin, then prepare the page for a static host such as Cloudflare Pages. Use when asked for a demo video, product video, launch video, promo, landing page, product site or cover image for an MCP App or agent plugin, or to publish such a page to Cloudflare Pages.
+description: Repo-internal skill for agent-kit. Make a narrated promo video and a simple landing page for an MCP Apps plugin in this repository (under plugins/) from real recordings of the plugin, then prepare the page for a static host such as Cloudflare Pages. Use when asked for a demo video, product video, launch video, promo, landing page, product site or cover image for an MCP App or agent plugin, or to publish such a page to Cloudflare Pages.
 ---
 
 # MCP App promo: video and landing page
+
+This skill is for maintaining plugins in this repository only. It is not one of the toolkit's published skills, so do not copy it into `skills/` or list it in the root README tools table.
 
 Produce three things for an MCP Apps plugin, every frame taken from the real plugin:
 
@@ -11,7 +13,7 @@ Produce three things for an MCP Apps plugin, every frame taken from the real plu
 2. A cover image and a short landing page in the same style.
 3. A static `dist/` folder that any static host can serve, ready for Cloudflare Pages.
 
-A complete, working example lives in [`plugins/excalidraw/promo/`](../../plugins/excalidraw/promo/README.md). Start from it.
+A complete, working example lives in [`plugins/excalidraw/promo/`](../../../plugins/excalidraw/promo/README.md). Start from it.
 
 ## Permissions and side effects
 

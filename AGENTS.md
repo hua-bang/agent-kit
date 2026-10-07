@@ -13,6 +13,7 @@
 ## 目录与权威来源
 
 - 独立 skill 放在 `skills/<kebab-case-name>/`，入口是 `SKILL.md`。
+- 只服务于维护本仓库的 skill 放在 `.agents/skills/<name>/`（如 `mcp-app-promo`），不放进 `skills/`，也不列入根 README 的工具表。
 - skill frontmatter 至少包含 `name` 和 `description`；名称与目录一致，描述说明触发场景。
 - 引用资料、脚本与资产就近放在工具目录；只在有实际内容时创建子目录，不生成空模板。
 - plugin 放在 `plugins/<name>/`，保留原生包结构、版本、许可证与客户端适配。

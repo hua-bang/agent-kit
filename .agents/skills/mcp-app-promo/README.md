@@ -1,6 +1,6 @@
 # mcp-app-promo
 
-Skill for making a narrated promo video and a landing page for an MCP Apps plugin from real recordings, ready for Cloudflare Pages. Instructions: [SKILL.md](SKILL.md). Worked example: [plugins/excalidraw/promo](../../plugins/excalidraw/promo/README.md).
+Repo-internal skill (used only when working on this repository; not part of the published `skills/`) for making a narrated promo video and a landing page for an MCP Apps plugin from real recordings, ready for Cloudflare Pages. Instructions: [SKILL.md](SKILL.md). Worked example: [plugins/excalidraw/promo](../../../plugins/excalidraw/promo/README.md).
 
 ## Scripts and requirements
 

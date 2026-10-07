@@ -1,6 +1,6 @@
 # Agentic Excalidraw 宣传素材
 
-用真实插件录制中英文宣传片，并生成同一风格的官网。做法和规则见 [mcp-app-promo skill](../../../skills/mcp-app-promo/SKILL.md)；这里是本插件的具体素材。生成的截图、音频、视频和站点都写入 `promo/out/`（已被 Git 忽略），不提交。
+用真实插件录制中英文宣传片，并生成同一风格的官网。做法和规则见 [仓库内 mcp-app-promo skill](../../../.agents/skills/mcp-app-promo/SKILL.md)；这里是本插件的具体素材。生成的截图、音频、视频和站点都写入 `promo/out/`（已被 Git 忽略），不提交。
 
 ## 文件
 
@@ -23,7 +23,7 @@ npm ci && npm run build
 TTS_PYTHON=/path/to/.venv-tts/bin/python KOKORO_DIR=/path/to/kokoro-model bash promo/make.sh
 ```
 
-依赖与安装方式见 [skill README](../../../skills/mcp-app-promo/README.md)：ffmpeg、Playwright 用的 Chromium（可用 `PLAYWRIGHT_CHROMIUM_EXECUTABLE` 指定）、装有 kokoro-onnx 与 misaki[zh] 的 Python，以及 Kokoro 模型文件。脚本本身不下载、不安装、不部署；录制使用临时图纸目录，不读写 `~/.excalidraw-plugin/`。
+依赖与安装方式见 [skill README](../../../.agents/skills/mcp-app-promo/README.md)：ffmpeg、Playwright 用的 Chromium（可用 `PLAYWRIGHT_CHROMIUM_EXECUTABLE` 指定）、装有 kokoro-onnx 与 misaki[zh] 的 Python，以及 Kokoro 模型文件。脚本本身不下载、不安装、不部署；录制使用临时图纸目录，不读写 `~/.excalidraw-plugin/`。
 
 产物：
 

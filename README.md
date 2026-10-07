@@ -9,7 +9,6 @@ A personal toolkit of agent skills, plugins, and workflows.
 | 类型 | 工具 | 状态 | 用途 |
 | --- | --- | --- | --- |
 | Skill | [init-harness](skills/init-harness/SKILL.md) | 首版，待真实项目试用 | 复用项目已有规则与检查入口，建立最小可用的开发、验证和交付闭环 |
-| Skill | [mcp-app-promo](skills/mcp-app-promo/SKILL.md) | 首版，已用于 Agentic Excalidraw 宣传片与官网 | 用真实录屏为 MCP Apps 插件制作带配音字幕的宣传片和官网，并准备 Cloudflare Pages 部署 |
 | Plugin | [Agentic Excalidraw](plugins/excalidraw/README.md) | Agent Plugins 包；预构建版发布在 `release` 分支（`codex plugin marketplace add hua-bang/agent-kit --ref release`），桌面 UI 待验收 | 本地持久化图纸，用户与 Agent 共同编辑 |
 | Plugin | [Excalidraw diagrams](plugins/excalidraw-diagrams/README.md) | 已收录二创包，客户端/MCP 待验证 | 生成、展示和导出架构图；上游许可尚未核实 |
 
@@ -20,11 +19,8 @@ agent-kit/
 ├── AGENTS.md
 ├── README.md
 ├── skills/
-│   ├── init-harness/
-│   │   └── SKILL.md
-│   └── mcp-app-promo/
-│       ├── SKILL.md
-│       └── scripts/
+│   └── init-harness/
+│       └── SKILL.md
 └── plugins/
     ├── README.md
     ├── excalidraw/
@@ -32,6 +28,7 @@ agent-kit/
 ```
 
 - `skills/<name>/SKILL.md` 是独立技能入口。有实际内容时再添加 `references/`、`scripts/` 或 `assets/`。
+- `.agents/skills/` 是维护本仓库时自用的 skill（目前有给插件做宣传片和官网的 `mcp-app-promo`），不属于对外收录的工具。
 - `plugins/<name>/` 保留插件自身的结构、来源说明和许可证。插件内的 skill 不再复制到根级 `skills/`。
 - 平台专属适配留在相应工具内；暂不提供统一安装器。
 

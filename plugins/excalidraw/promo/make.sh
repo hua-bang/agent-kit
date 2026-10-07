@@ -11,7 +11,7 @@ set -euo pipefail
 : "${TTS_PYTHON:?Set TTS_PYTHON to a Python that has kokoro-onnx, misaki[zh], numpy and soundfile}"
 : "${KOKORO_DIR:?Set KOKORO_DIR to the folder with kokoro-v1.0.onnx and voices-v1.0.bin}"
 OUT=${OUT:-promo/out}
-SKILL=../../skills/mcp-app-promo/scripts
+SKILL=../../.agents/skills/mcp-app-promo/scripts
 LEAD=0.5 # seconds of page load trimmed from the start of each recording
 [ -f dist/server/index.js ] || { echo 'Build the plugin first: npm run build' >&2; exit 1; }
 mkdir -p "$OUT"
@@ -56,4 +56,4 @@ python3 "$SKILL/build_site.py" --page promo/site/zh.html --assets "$OUT/assets-z
 python3 "$SKILL/build_site.py" --page promo/site/en.html --assets "$OUT/assets-en" --out "$OUT/dist/en" --lang en
 
 echo "Done. Videos: $OUT/assets-*/promo.mp4  Site: $OUT/dist (zh at /, en at /en/)"
-echo "Deploying is a separate, explicit step; see skills/mcp-app-promo/SKILL.md (Cloudflare Pages)."
+echo "Deploying is a separate, explicit step; see .agents/skills/mcp-app-promo/SKILL.md (Cloudflare Pages)."
