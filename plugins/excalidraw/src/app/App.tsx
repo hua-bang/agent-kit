@@ -212,7 +212,8 @@ export function App() {
         if (fresh() && result.document.plugin.revision > current.current!.plugin.revision) load(result.document);
       } catch (e) { setError(tRef.current.refreshFailed(String(e))); }
       finally { checking = false; }
-    }, 5000);
+      // The metadata list is served from the server's cache, so a short interval keeps agent edits feeling live.
+    }, 2000);
     return () => clearInterval(timer);
   }, [connected]);
   useEffect(() => {
