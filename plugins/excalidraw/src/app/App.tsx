@@ -27,9 +27,9 @@ export function App() {
   // the user pans or zooms (sidebar tabs are resized often; their view is theirs).
   const lastFit = useRef(0);
   const viewportMoved = useRef(false);
-  function fit(editor: ExcalidrawImperativeAPI) {
+  function fit(editor: ExcalidrawImperativeAPI, animate = false) {
     lastFit.current = Date.now(); viewportMoved.current = false;
-    fitContent(editor);
+    fitContent(editor, animate);
   }
   // Excalidraw normalises a scene when it mounts; that first change is not a user edit.
   const baseline = useRef(true);
@@ -52,6 +52,9 @@ export function App() {
   const [editorKey, setEditorKey] = useState(0);
   // A freshly mounted editor paints one frame at 100% before it is fitted; keep it hidden until then.
   const [fitting, setFitting] = useState(true);
+  // Most cards connect and load within a moment; only explain the wait if it actually takes a while.
+  const [slowStart, setSlowStart] = useState(false);
+  useEffect(() => { const timer = setTimeout(() => setSlowStart(true), 800); return () => clearTimeout(timer); }, []);
   const mounted = useRef(true);
   const handlers = useRef({ receive: (_: Payload) => {} });
   const sentContext = useRef<string | null>(null);
@@ -130,7 +133,7 @@ export function App() {
       if (Math.abs(window.innerWidth - previousWidth) < 100) return;
       previousWidth = window.innerWidth;
       clearTimeout(timer);
-      timer = setTimeout(() => { if (api.current && !viewportMoved.current) fit(api.current); }, 150);
+      timer = setTimeout(() => { if (api.current && !viewportMoved.current) fit(api.current, true); }, 150);
     };
     window.addEventListener('resize', resize);
     return () => { window.removeEventListener('resize', resize); clearTimeout(timer); };
@@ -355,7 +358,7 @@ export function App() {
           {!!library.drawings.length && !matches.length && <div className="empty-state"><p>{t.noMatches}</p><button className="tool" onClick={() => setQuery('')}>{t.clearSearch}</button></div>}
         </>}
       </section>
-    </> : <section id="main-content" className="card waiting" role="status">
+    </> : <section id="main-content" className={`card waiting ${slowStart ? '' : 'is-quiet'}`} role="status">
       <span className="empty-icon"><IconCanvas /></span>
       <span>{connected ? t.waitingDrawing : t.connecting}</span>
     </section>}
@@ -403,9 +406,9 @@ function librarySignature(library: Library) {
 }
 
 /** Fit the whole drawing into view, leaving a margin; never zoom small drawings past 100%. */
-function fitContent(editor: ExcalidrawImperativeAPI) {
+function fitContent(editor: ExcalidrawImperativeAPI, animate = false) {
   if (!editor.getSceneElements().length) return;
-  editor.scrollToContent(undefined, { fitToViewport: true, viewportZoomFactor: 0.9, maxZoom: 1 });
+  editor.scrollToContent(undefined, { fitToViewport: true, viewportZoomFactor: 0.9, maxZoom: 1, animate, duration: 300 });
 }
 
 /** A host-fixed height (sidebar, fullscreen) means the editor should fit it, not grow past it. */
