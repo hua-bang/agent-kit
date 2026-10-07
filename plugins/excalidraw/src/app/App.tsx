@@ -50,6 +50,8 @@ export function App() {
   const [newTitle, setNewTitle] = useState('');
   const [busy, setBusy] = useState(false);
   const [editorKey, setEditorKey] = useState(0);
+  // A freshly mounted editor paints one frame at 100% before it is fitted; keep it hidden until then.
+  const [fitting, setFitting] = useState(true);
   const mounted = useRef(true);
   const handlers = useRef({ receive: (_: Payload) => {} });
   const sentContext = useRef<string | null>(null);
@@ -75,6 +77,7 @@ export function App() {
       draft.current = sceneSchema.parse({ elements: editor.getSceneElementsIncludingDeleted(), appState: editor.getAppState(), files: editor.getFiles() });
     } else {
       api.current = null;
+      setFitting(true);
       setEditorKey(k => k + 1);
     }
   }
@@ -115,6 +118,11 @@ export function App() {
     }).catch(e => { setError(tRef.current.connectFailed(e.message)); setStatus('disconnected'); });
     return () => { mounted.current = false; };
   }, []);
+  useEffect(() => {
+    // Fallback: never leave the editor hidden if the fit callback does not arrive.
+    const timer = setTimeout(() => setFitting(false), 1500);
+    return () => clearTimeout(timer);
+  }, [editorKey]);
   useEffect(() => {
     let previousWidth = window.innerWidth;
     let timer: ReturnType<typeof setTimeout>;
@@ -266,12 +274,16 @@ export function App() {
         {(tone === 'pending' || tone === 'error') && <button className="tool save" disabled={busy} onClick={() => { conflict.current = false; void save(); }}>{t.save}</button>}
       </header>
       {messages}
-      <section id="main-content" className="editor" aria-label={t.editorLabel}>
+      <section id="main-content" className={`editor ${fitting ? 'is-fitting' : ''}`} aria-label={t.editorLabel}>
       <Excalidraw key={editorKey}
         excalidrawAPI={value => {
           api.current = value;
           // Open each drawing fitted to the visible area (after layout has sized the canvas).
-          requestAnimationFrame(() => requestAnimationFrame(() => { if (api.current === value) fit(value); }));
+          requestAnimationFrame(() => requestAnimationFrame(() => {
+            if (api.current !== value) return;
+            fit(value);
+            requestAnimationFrame(() => { if (api.current === value) setFitting(false); });
+          }));
         }}
         // New shapes and text default to the hand-drawn style: sketchy lines and Virgil
         // (the face this build actually renders, so drawings look the same in Excalidraw).

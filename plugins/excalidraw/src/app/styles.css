@@ -126,6 +126,8 @@ html, body, #root { height: 100%; }
 .app > .editor { flex: 1 0 auto; height: 600px; min-height: 400px; }
 /* Host-fixed frame (sidebar, fullscreen): fit the editor inside it instead. */
 [data-fill] .app > .editor { flex: 1 1 0; height: auto; min-height: 320px; }
+.app > .editor { transition: opacity .15s ease; }
+.app > .editor.is-fitting { opacity: 0; transition: none; }
 
 /* Conversation card */
 .app > .card { flex: 1 0 auto; display: flex; flex-direction: column; }
@@ -177,5 +179,6 @@ html, body, #root { height: 100%; }
   .drawing-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 }
 @media (prefers-reduced-motion: reduce) {
+  .app > .editor { transition: none; }
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }

@@ -56,6 +56,8 @@ try {
   await frame.getByLabel('新图纸名称').fill('浏览器实际编辑验证');
   await frame.getByRole('button', { name: '新建图纸', exact: true }).click();
   await frame.getByLabel('图纸名称', { exact: true }).waitFor({ timeout: 12000 }).catch(async e => { console.error(await frame.locator('body').innerText()); throw e; });
+  // A new editor stays hidden only until its first fit, so it never flashes at 100% before zooming.
+  await until(async () => (await frame.locator('.editor').getAttribute('class')).split(' ').every(c => c !== 'is-fitting'));
   await frame.locator('.excalidraw canvas.interactive').first().waitFor();
   // Draw using Excalidraw's native keyboard tool and pointer gestures.
   await frame.locator('.excalidraw canvas.interactive').first().click({ position: { x: 350, y: 230 } });
