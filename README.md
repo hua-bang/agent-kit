@@ -28,6 +28,7 @@ agent-kit/
 ```
 
 - `skills/<name>/SKILL.md` 是独立技能入口。有实际内容时再添加 `references/`、`scripts/` 或 `assets/`。
+- `.agents/skills/` 是维护本仓库时自用的 skill（目前有给插件做宣传片和官网的 `mcp-app-promo`），不属于对外收录的工具。
 - `plugins/<name>/` 保留插件自身的结构、来源说明和许可证。插件内的 skill 不再复制到根级 `skills/`。
 - 平台专属适配留在相应工具内；暂不提供统一安装器。
 

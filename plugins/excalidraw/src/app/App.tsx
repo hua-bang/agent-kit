@@ -27,9 +27,9 @@ export function App() {
   // the user pans or zooms (sidebar tabs are resized often; their view is theirs).
   const lastFit = useRef(0);
   const viewportMoved = useRef(false);
-  function fit(editor: ExcalidrawImperativeAPI) {
+  function fit(editor: ExcalidrawImperativeAPI, animate = false) {
     lastFit.current = Date.now(); viewportMoved.current = false;
-    fitContent(editor);
+    fitContent(editor, animate);
   }
   // Excalidraw normalises a scene when it mounts; that first change is not a user edit.
   const baseline = useRef(true);
@@ -50,6 +50,11 @@ export function App() {
   const [newTitle, setNewTitle] = useState('');
   const [busy, setBusy] = useState(false);
   const [editorKey, setEditorKey] = useState(0);
+  // A freshly mounted editor paints one frame at 100% before it is fitted; keep it hidden until then.
+  const [fitting, setFitting] = useState(true);
+  // Most cards connect and load within a moment; only explain the wait if it actually takes a while.
+  const [slowStart, setSlowStart] = useState(false);
+  useEffect(() => { const timer = setTimeout(() => setSlowStart(true), 800); return () => clearTimeout(timer); }, []);
   const mounted = useRef(true);
   const handlers = useRef({ receive: (_: Payload) => {} });
   const sentContext = useRef<string | null>(null);
@@ -75,6 +80,7 @@ export function App() {
       draft.current = sceneSchema.parse({ elements: editor.getSceneElementsIncludingDeleted(), appState: editor.getAppState(), files: editor.getFiles() });
     } else {
       api.current = null;
+      setFitting(true);
       setEditorKey(k => k + 1);
     }
   }
@@ -116,13 +122,18 @@ export function App() {
     return () => { mounted.current = false; };
   }, []);
   useEffect(() => {
+    // Fallback: never leave the editor hidden if the fit callback does not arrive.
+    const timer = setTimeout(() => setFitting(false), 1500);
+    return () => clearTimeout(timer);
+  }, [editorKey]);
+  useEffect(() => {
     let previousWidth = window.innerWidth;
     let timer: ReturnType<typeof setTimeout>;
     const resize = () => {
       if (Math.abs(window.innerWidth - previousWidth) < 100) return;
       previousWidth = window.innerWidth;
       clearTimeout(timer);
-      timer = setTimeout(() => { if (api.current && !viewportMoved.current) fit(api.current); }, 150);
+      timer = setTimeout(() => { if (api.current && !viewportMoved.current) fit(api.current, true); }, 150);
     };
     window.addEventListener('resize', resize);
     return () => { window.removeEventListener('resize', resize); clearTimeout(timer); };
@@ -201,7 +212,8 @@ export function App() {
         if (fresh() && result.document.plugin.revision > current.current!.plugin.revision) load(result.document);
       } catch (e) { setError(tRef.current.refreshFailed(String(e))); }
       finally { checking = false; }
-    }, 5000);
+      // The metadata list is served from the server's cache, so a short interval keeps agent edits feeling live.
+    }, 2000);
     return () => clearInterval(timer);
   }, [connected]);
   useEffect(() => {
@@ -266,12 +278,16 @@ export function App() {
         {(tone === 'pending' || tone === 'error') && <button className="tool save" disabled={busy} onClick={() => { conflict.current = false; void save(); }}>{t.save}</button>}
       </header>
       {messages}
-      <section id="main-content" className="editor" aria-label={t.editorLabel}>
+      <section id="main-content" className={`editor ${fitting ? 'is-fitting' : ''}`} aria-label={t.editorLabel}>
       <Excalidraw key={editorKey}
         excalidrawAPI={value => {
           api.current = value;
           // Open each drawing fitted to the visible area (after layout has sized the canvas).
-          requestAnimationFrame(() => requestAnimationFrame(() => { if (api.current === value) fit(value); }));
+          requestAnimationFrame(() => requestAnimationFrame(() => {
+            if (api.current !== value) return;
+            fit(value);
+            requestAnimationFrame(() => { if (api.current === value) setFitting(false); });
+          }));
         }}
         // New shapes and text default to the hand-drawn style: sketchy lines and Virgil
         // (the face this build actually renders, so drawings look the same in Excalidraw).
@@ -343,7 +359,7 @@ export function App() {
           {!!library.drawings.length && !matches.length && <div className="empty-state"><p>{t.noMatches}</p><button className="tool" onClick={() => setQuery('')}>{t.clearSearch}</button></div>}
         </>}
       </section>
-    </> : <section id="main-content" className="card waiting" role="status">
+    </> : <section id="main-content" className={`card waiting ${slowStart ? '' : 'is-quiet'}`} role="status">
       <span className="empty-icon"><IconCanvas /></span>
       <span>{connected ? t.waitingDrawing : t.connecting}</span>
     </section>}
@@ -391,9 +407,9 @@ function librarySignature(library: Library) {
 }
 
 /** Fit the whole drawing into view, leaving a margin; never zoom small drawings past 100%. */
-function fitContent(editor: ExcalidrawImperativeAPI) {
+function fitContent(editor: ExcalidrawImperativeAPI, animate = false) {
   if (!editor.getSceneElements().length) return;
-  editor.scrollToContent(undefined, { fitToViewport: true, viewportZoomFactor: 0.9, maxZoom: 1 });
+  editor.scrollToContent(undefined, { fitToViewport: true, viewportZoomFactor: 0.9, maxZoom: 1, animate, duration: 300 });
 }
 
 /** A host-fixed height (sidebar, fullscreen) means the editor should fit it, not grow past it. */
