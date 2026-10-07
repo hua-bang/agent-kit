@@ -187,7 +187,7 @@ npm run test:browser
 
 ## 宣传素材
 
-`promo/` 保存宣传片与官网的生成脚本、案例和页面源码，用真实插件录制，产物写入被忽略的 `promo/out/`。说明见 [promo/README.md](promo/README.md)。`promo/` 不在 release 打包范围内。
+`promo/` 保存宣传片与官网的生成脚本、案例和页面源码，用真实插件录制，产物写入被忽略的 `promo/out/`。说明见 [promo/README.md](promo/README.md)，通用做法见 [mcp-app-promo skill](../../skills/mcp-app-promo/SKILL.md)。`promo/` 不在 release 打包范围内。
 
 ## 安全与发布限制
 
