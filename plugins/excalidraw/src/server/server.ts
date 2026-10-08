@@ -24,7 +24,7 @@ export function createServer(store = new DrawingStore(), htmlPath = new URL('../
   const debug = !!process.env.EXCALIDRAW_DEBUG_LOG;
   const entrypoints = [
     ...(process.env.EXCALIDRAW_ENABLE_SIDEBAR === '0' ? [] : [{ type: 'global' }]),
-    ...(process.env.EXCALIDRAW_ENABLE_THREAD === '1' ? [{ type: 'thread' }] : []),
+    ...(process.env.EXCALIDRAW_ENABLE_THREAD === '0' ? [] : [{ type: 'thread' }]),
   ];
   const readonly = { readOnlyHint: true, openWorldHint: false };
   const writable = { readOnlyHint: false, destructiveHint: false, openWorldHint: false };
@@ -81,7 +81,7 @@ export function createServer(store = new DrawingStore(), htmlPath = new URL('../
     }
   });
   registerAppTool(server, 'open_library', {
-    title: 'Agentic Excalidraw 图纸库', description: 'Open the dedicated local drawing library, intended for Sidebar. If the host cannot show Sidebar, this explicit library tool can open a library App. Use open_drawing for conversation cards.',
+    title: 'Agentic Excalidraw 图纸库', description: 'Open the dedicated local drawing library, intended for the Sidebar and the conversation side panel. If the host cannot show either, this explicit library tool can open a library App. Use open_drawing for conversation cards.',
     inputSchema: {}, annotations: readonly,
     _meta: { ui: { resourceUri: LIBRARY_URI }, ...(entrypoints.length ? { 'openai/ui': { entrypoints } } : {}) },
   }, () => guarded(async () => ({ view: 'library', ...await store.list() })));

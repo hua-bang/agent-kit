@@ -181,6 +181,8 @@ npm run test:browser
 ## 侧边栏（Global 入口）
 
 `open_library` 默认带 `openai/ui.entrypoints: [{type: "global"}]` 元数据，支持的 OpenAI 宿主会把图纸库放进侧边栏，以带输入框的标签页打开；页面上下文进入该标签页自己的会话。在服务进程设置 `EXCALIDRAW_ENABLE_SIDEBAR=0` 可关闭。
+
+同一工具默认还带 `{type: "thread"}`，支持的宿主会在会话侧面板打开图纸库，每个会话一个实例；设置 `EXCALIDRAW_ENABLE_THREAD=0` 可关闭。宿主不提供会话标识，所以面板把“在此面板打开过的图纸”记为本会话列表，排在“最近”之前，并随模型上下文上报；宿主在重新挂载时交还该上下文，列表随之恢复。用户删除上下文附件后列表清空。AI 在消息卡片里新建的图不会自动加入，需从“最近”打开一次。尚未在真实宿主中验证侧面板。
 侧边栏图标来自服务端 `serverInfo.icons`（单色 SVG、`currentColor`、20×20 视口、1.33px 描边）；当前 MCP SDK 不输出工具级 `icons`，按规范宿主会回退到服务端图标。
 该入口使用 `ui://excalidraw/library.html`，先进入图纸列表，再进入详情。对话图纸使用 `ui://excalidraw/editor.html`，直接进入编辑器。两者共用真实数据与构建包，不支持该扩展的宿主会忽略这项元数据。
 参考 [OpenAI Extensions](https://developers.openai.com/plugins/build/extensions) 及其规范 [openai/mcp-extensions](https://github.com/openai/mcp-extensions/blob/main/docs/spec.md)。尚未在真实宿主中验证侧边栏显示与图标。
@@ -189,7 +191,6 @@ npm run test:browser
 
 用于实测宿主在规范之外传了什么，例如是否带会话标识。默认全部关闭。
 
-- `EXCALIDRAW_ENABLE_THREAD=1`：给 `open_library` 追加 `{type: "thread"}` 入口，图纸库出现在会话侧面板。实验开关，尚未在真实宿主验证。
 - `EXCALIDRAW_DEBUG_LOG=<绝对路径>`：服务端把每个请求的 method、工具名和 `_meta` 逐行追加到该文件（JSON Lines）；App 连接后把 `hostContext` 通过仅 App 可见的 `debug_host_context` 工具写入同一文件。日志可能含本机路径和图纸标题，不要提交。
 
 环境变量必须进入宿主启动的 MCP 进程；桌面启动器不一定继承终端环境。

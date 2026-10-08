@@ -57,6 +57,10 @@ export function App() {
   useEffect(() => { const timer = setTimeout(() => setSlowStart(true), 800); return () => clearTimeout(timer); }, []);
   const mounted = useRef(true);
   const handlers = useRef({ receive: (_: Payload) => {} });
+  // Drawings opened in this library instance, newest first. A thread panel has one instance per
+  // conversation, so this is the panel's "this conversation" list. Hosts give no conversation id;
+  // the list travels in this instance's model context, which hosts hand back on remount.
+  const [session, setSession] = useState<string[]>([]);
   const sentContext = useRef<string | null>(null);
   const dismissedContext = useRef<string | null>(null);
   const [theme, setTheme] = useState<McpUiTheme>(() => matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
@@ -70,6 +74,7 @@ export function App() {
     baseline.current = true;
     editCounter.current++;
     setDoc(next); setTitle(next.plugin.title); setError(''); setStatus('saved');
+    if (isLibrary) setSession(ids => ids[0] === next.plugin.id ? ids : [next.plugin.id, ...ids.filter(id => id !== next.plugin.id)].slice(0, 50));
     if (editor) {
       const scene = restore(sceneOf(next) as unknown as Parameters<typeof restore>[0], null, null);
       editor.addFiles(Object.values(scene.files));
@@ -116,6 +121,7 @@ export function App() {
       setLocale(pickLocale(bridge.getHostContext()?.locale));
       applyFill();
       setConnected(true); setStatus('connected');
+      if (isLibrary) setSession(ids => ids.length ? ids : restoredSession());
       if (document.querySelector('meta[name="excalidraw-debug"]')) {
         void bridge.callServerTool({ name: 'debug_host_context', arguments: { surface: isLibrary ? 'library' : 'drawing', hostContext: bridge.getHostContext() ?? null } }).catch(() => {});
       }
@@ -231,14 +237,14 @@ export function App() {
   useEffect(() => {
     if (!connected || !bridge.getHostCapabilities()?.updateModelContext?.text) return;
     const timer = setTimeout(() => {
-      const context = describeView(t, isLibrary, doc, library, query);
+      const context = describeView(t, isLibrary, doc, library, query, session);
       if (!context || context.key === dismissedContext.current) return;
       dismissedContext.current = null;
       sentContext.current = context.key;
       void bridge.updateModelContext(context.params).catch(() => {});
     }, 400);
     return () => clearTimeout(timer);
-  }, [connected, doc?.plugin.id, doc?.plugin.revision, doc?.plugin.title, library, query, locale]);
+  }, [connected, doc?.plugin.id, doc?.plugin.revision, doc?.plugin.title, library, query, locale, session]);
 
   async function action(work: () => Promise<void>) {
     setBusy(true); setError('');
@@ -262,6 +268,12 @@ export function App() {
     current.current = null; setDoc(null); setLibrary(null); await refreshLibrary();
   }
   const matches = library?.drawings.filter(d => d.title.toLocaleLowerCase().includes(query.toLocaleLowerCase())) ?? [];
+  // Without a search, drawings opened in this panel come first; a search always shows one flat list.
+  const pinned = query ? [] : session.flatMap(id => matches.filter(d => d.id === id));
+  const others = matches.filter(d => !pinned.includes(d));
+  const card = (d: DrawingSummary) => <button className="drawing" key={d.id} disabled={busy || refreshing} onClick={() => void action(async () => {
+    load((await callTool<{ document: Drawing }>('read_drawing', { id: d.id })).document); setNotice('');
+  })}><Preview summary={d} dark={theme === 'dark'} t={t} /><span className="drawing-info"><strong>{d.title}</strong><span className="meta">{relativeTime(d.updatedAt, locale, t)}</span></span></button>;
   const tone = status === 'paused' || status === 'disconnected' ? 'error' : status === 'saving' || status === 'unsaved' ? 'pending' : status === 'saved' ? 'ok' : 'idle';
   // Autosave makes "saved" the normal state: announce it to screen readers, show only the exceptions.
   const statusPill = <span className={`status tone-${tone}`} role="status" aria-live="polite">{tone === 'ok' ? <span className="sr-only">{t.status[status]}</span> : <><i aria-hidden="true" />{t.status[status]}</>}</span>;
@@ -352,12 +364,15 @@ export function App() {
         </div>
         {!library ? <p className="empty-state" role="status">{error ? t.libraryLoadFailed : connected ? t.libraryLoading : t.waitingHost}</p> : <>
           {library.warnings.length > 0 && <p className="banner error inline" role="alert">{t.unreadable(library.warnings.length)}</p>}
+          {pinned.length > 0 && <>
+            <h2 className="group-title">{t.thisConversation}</h2>
+            <div className="drawing-grid" aria-busy={refreshing}>{pinned.map(card)}</div>
+            <h2 className="group-title">{t.recent}</h2>
+          </>}
           <div className="drawing-grid" aria-busy={refreshing}>
-            {matches.slice(0, limit).map(d => <button className="drawing" key={d.id} disabled={busy || refreshing} onClick={() => void action(async () => {
-              load((await callTool<{ document: Drawing }>('read_drawing', { id: d.id })).document); setNotice('');
-            })}><Preview summary={d} dark={theme === 'dark'} t={t} /><span className="drawing-info"><strong>{d.title}</strong><span className="meta">{relativeTime(d.updatedAt, locale, t)}</span></span></button>)}
+            {others.slice(0, limit).map(card)}
           </div>
-          {matches.length > limit && <button className="tool more" onClick={() => setLimit(value => value + 20)}>{t.showMore}</button>}
+          {others.length > limit && <button className="tool more" onClick={() => setLimit(value => value + 20)}>{t.showMore}</button>}
           {!library.drawings.length && <div className="empty-state"><span className="empty-icon"><IconCanvas /></span><strong>{t.emptyTitle}</strong><p>{t.emptyHint}</p></div>}
           {!!library.drawings.length && !matches.length && <div className="empty-state"><p>{t.noMatches}</p><button className="tool" onClick={() => setQuery('')}>{t.clearSearch}</button></div>}
         </>}
@@ -374,7 +389,7 @@ export function App() {
  * `key` identifies the view (not its contents) so a removed attachment stays removed until it changes.
  * `openai/title` labels the composer attachment on OpenAI hosts; other hosts ignore it.
  */
-function describeView(t: Messages, isLibrary: boolean, doc: Drawing | null, library: Library | null, query: string) {
+function describeView(t: Messages, isLibrary: boolean, doc: Drawing | null, library: Library | null, query: string, session: string[]) {
   const block = (title: string, text: string) => ({ type: 'text' as const, text, _meta: { 'openai/title': title } });
   const drawing = (d: DrawingSummary) => ({ id: d.id, title: d.title, revision: d.revision, updatedAt: d.updatedAt });
   if (doc) {
@@ -382,10 +397,11 @@ function describeView(t: Messages, isLibrary: boolean, doc: Drawing | null, libr
     const text = `The user has the Agentic Excalidraw drawing "${doc.plugin.title}" open in the editor `
       + `(id ${doc.plugin.id}, revision ${doc.plugin.revision}, ${doc.elements.filter(e => !e.isDeleted).length} elements). `
       + 'Call read_drawing with this id for its latest content before describing or changing it; use patch_drawing with the latest revision to edit.'
-      + ' The editor autosaves about every 1.2 seconds.';
+      + ' The editor autosaves about every 1.2 seconds.'
+      + (isLibrary && session.length > 1 ? ` Drawings opened in this panel, newest first: ${session.join(', ')}.` : '');
     return { key: `${view}:${doc.plugin.id}`, params: {
       content: [block(`Agentic Excalidraw · ${doc.plugin.title}`, text)],
-      structuredContent: { app: 'local-excalidraw', view, drawing: drawing(doc.plugin) },
+      structuredContent: { app: 'local-excalidraw', view, drawing: drawing(doc.plugin), ...(isLibrary ? { session } : {}) },
     } };
   }
   if (!isLibrary || !library) return null;
@@ -395,14 +411,22 @@ function describeView(t: Messages, isLibrary: boolean, doc: Drawing | null, libr
   const text = [
     `The user is viewing the Agentic Excalidraw drawing library: ${library.drawings.length} drawing(s)`
       + (query ? `, filtered by "${query}" to ${shown.length}` : '') + ', most recently updated first.',
+    ...(session.length ? [`Opened in this panel (this conversation), newest first: ${session.join(', ')}.`] : []),
     ...listed.map(d => `- "${d.title}" (id ${d.id}, revision ${d.revision}, updated ${d.updatedAt})`),
     ...(shown.length > listed.length ? [`- …and ${shown.length - listed.length} more; call list_drawings for all.`] : []),
     'Call read_drawing with an id to see a drawing\'s content.',
   ].join('\n');
   return { key: `library:${query}`, params: {
     content: [block(t.libraryContextTitle(`${query ? `${shown.length}/` : ''}${library.drawings.length}`), text)],
-    structuredContent: { app: 'local-excalidraw', view: 'library', query, total: library.drawings.length, drawings: listed.map(drawing) },
+    structuredContent: { app: 'local-excalidraw', view: 'library', query, total: library.drawings.length, drawings: listed.map(drawing), session },
   } };
+}
+
+/** The panel's list as this instance last reported it; OpenAI hosts return it in host context on remount. */
+function restoredSession(): string[] {
+  const context = (bridge.getHostContext() as Record<string, unknown> | undefined)?.['openai/modelContext'] as { structuredContent?: { session?: unknown } } | null | undefined;
+  const ids = context?.structuredContent?.session;
+  return Array.isArray(ids) ? ids.filter((id): id is string => typeof id === 'string').slice(0, 50) : [];
 }
 
 function librarySignature(library: Library) {
