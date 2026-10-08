@@ -9,6 +9,9 @@ import { guarded } from '../result.js';
 /** Tools that open an App view: the library (entrypoints) and fixed-ID drawing cards. */
 export function registerViewTools(server: McpServer, store: DrawingStore) {
   const ui = { resourceUri: UI_URI };
+  // Declared on the tool so hosts record UI info with each call (Codex keeps it in history
+  // as mcpAppUi) and can render the card from a past call, not only from the live result.
+  const card = { ui, 'openai/ui': { preferredModelDisplayMode: 'inline' } };
   // Sidebar: one library for the whole app. The side panel is a separate tool and page, because an
   // App cannot tell which entrypoint opened it, and only the panel belongs to one conversation.
   registerAppTool(server, 'open_library', {
@@ -23,10 +26,10 @@ export function registerViewTools(server: McpServer, store: DrawingStore) {
   }, () => guarded(async () => ({ view: 'library', ...await store.list() })));
   registerAppTool(server, 'open_drawing', {
     description: 'Open a specific drawing in the inline Agentic Excalidraw MCP App.',
-    inputSchema: { id: idSchema }, _meta: { ui }, annotations: readonly,
+    inputSchema: { id: idSchema }, _meta: card, annotations: readonly,
   }, ({ id }) => guarded(async () => ({ document: await store.read(id) })));
   registerAppTool(server, 'create_drawing', {
     description: 'Create a local drawing and show it as a fixed-ID card that opens straight in the editor. Optional scene contains Excalidraw elements; omit for a blank canvas.',
-    inputSchema: { title: titleSchema, scene: sceneSchema.optional() }, annotations: writable, _meta: { ui },
+    inputSchema: { title: titleSchema, scene: sceneSchema.optional() }, annotations: writable, _meta: card,
   }, ({ title, scene }) => guarded(async () => ({ document: await store.create(title, scene) })));
 }

@@ -15,7 +15,11 @@ export function registerAppPages(server: McpServer, htmlPath: URL) {
     registerAppResource(server, `Agentic Excalidraw ${surface}`, uri, {}, async () => ({ contents: [{
       uri, mimeType: RESOURCE_MIME_TYPE,
       text: (await readFile(htmlPath, 'utf8')).replace('<head>', `<head><meta name="excalidraw-surface" content="${surface}">${debug}`),
-      _meta: { ui: { prefersBorder: true, csp: { connectDomains: [], resourceDomains: [] } } },
+      _meta: {
+        ui: { prefersBorder: true, csp: { connectDomains: [], resourceDomains: [] } },
+        // Every page works inline and fullscreen; hosts use this to pick where to render it.
+        'openai/ui': { availableDisplayModes: ['inline', 'fullscreen'], preferredDisplayMode: 'inline' },
+      },
     }] }));
   }
 }
