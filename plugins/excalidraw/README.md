@@ -127,7 +127,7 @@ npm run test:stdio
 编辑器页头只保留标题（图纸库里另有返回列表按钮）；已保存是常态，不显示，只有保存中、有未保存修改或保存暂停时才显示状态；有未保存修改或自动保存暂停时才出现“保存”按钮。冲突或错误会暂停自动保存，保留编辑器草稿，用户可以从菜单导出草稿或明确放弃后重新载入。不会静默覆盖。
 编辑器菜单（☰）里的“导出”下载标准 `.excalidraw` 文件，需要宿主允许 iframe 下载。关闭宿主可能不触发浏览器退出提示，请先确认“已保存”。
 
-界面支持简体中文与英文。用户可在图纸库页头或编辑器菜单（☰）里手动切换，选择保存在 `localStorage` 并优先生效；宿主禁止存储时只在本次打开内有效。未手动选择时使用宿主上下文的 `locale`，没有时按浏览器语言；`zh*` 显示中文，其余显示英文，Excalidraw 自带菜单随之切换。文案集中在 `src/app/i18n.ts`，不引入 i18n 依赖。工具标题和发给模型的上下文正文保持原样，只有附件标签随界面语言变化。
+界面支持简体中文与英文。用户可在图纸库页头或编辑器菜单（☰）里手动切换，选择保存在 `localStorage` 并优先生效；宿主禁止存储时只在本次打开内有效。未手动选择时使用宿主上下文的 `locale`，没有时按浏览器语言；`zh*` 显示中文，其余显示英文，Excalidraw 自带菜单随之切换。文案集中在 `src/app/ui/i18n.ts`，不引入 i18n 依赖。工具标题和发给模型的上下文正文保持原样，只有附件标签随界面语言变化。
 
 ## 本地存储
 
@@ -151,7 +151,7 @@ npm run test:stdio
 
 真实编辑器本身有体积成本：自包含 HTML 约 5.23 MB（准确字节数以构建输出为准），相比原始 9.01 MB 减少约 42%。JS/CSS 和字体在本地构建时内联，不从 CDN 加载。只打包许可已核实的字体：Excalifont、Cascadia Code、Liberation 分别以 Virgil、Comic Shanns、Assistant 渲染，Xiaolai（约 12 MiB）以 Assistant 加系统中文字体代替，详见 [字体许可](licenses/FONTS.md)。图纸文件中的字体设置不变，仅本插件内显示字形不同；字体原文件未被修改。
 
-MCP Apps 宿主在 `resourceDomains` 为空时通常不放行 `font-src`，`data:` 字体会被拒绝，手写字体退回衬线体。界面在 Excalidraw 创建字体前把内联字体解码为 `ArrayBuffer` 再交给 `FontFace`，不产生可被 CSP 拦截的请求（`src/app/fonts.ts`）；浏览器测试用不含 `font-src` 的 CSP 覆盖这一点。Excalidraw 只给 Excalifont 配了中文回退，其余字体的中文会落到浏览器默认字体（常为宋体），因此为其共同的最后回退 `Segoe UI Emoji` 注册了仅限 CJK 码位的系统中文字体别名：优先手写风格的 Xiaolai SC / 霞鹜文楷（若已安装），其次苹方、冬青黑体、微软雅黑、思源/Noto Sans CJK、文泉驿。Excalidraw 自身界面的 Assistant 字体由其 CSS 引用，在严格 CSP 下回退为系统字体，不影响画布。
+MCP Apps 宿主在 `resourceDomains` 为空时通常不放行 `font-src`，`data:` 字体会被拒绝，手写字体退回衬线体。界面在 Excalidraw 创建字体前把内联字体解码为 `ArrayBuffer` 再交给 `FontFace`，不产生可被 CSP 拦截的请求（`src/app/ui/fonts.ts`）；浏览器测试用不含 `font-src` 的 CSP 覆盖这一点。Excalidraw 只给 Excalifont 配了中文回退，其余字体的中文会落到浏览器默认字体（常为宋体），因此为其共同的最后回退 `Segoe UI Emoji` 注册了仅限 CJK 码位的系统中文字体别名：优先手写风格的 Xiaolai SC / 霞鹜文楷（若已安装），其次苹方、冬青黑体、微软雅黑、思源/Noto Sans CJK、文泉驿。Excalidraw 自身界面的 Assistant 字体由其 CSS 引用，在严格 CSP 下回退为系统字体，不影响画布。
 
 Mermaid 转换库及其 Mermaid/Cytoscape/KaTeX 依赖图不进入 UI 构建；粘贴 Mermaid 源码会保留为可编辑文本，不转换为图形。Agent 仍直接生成或修改 Excalidraw 元素。保留全部现有语言包与字体子集化能力。
 
@@ -186,6 +186,14 @@ npm run test:browser
 侧边栏图标来自服务端 `serverInfo.icons`（单色 SVG、`currentColor`、20×20 视口、1.33px 描边）；当前 MCP SDK 不输出工具级 `icons`，按规范宿主会回退到服务端图标。
 该入口使用 `ui://excalidraw/library.html`，先进入图纸列表，再进入详情。对话图纸使用 `ui://excalidraw/editor.html`，直接进入编辑器。两者共用真实数据与构建包，不支持该扩展的宿主会忽略这项元数据。
 参考 [OpenAI Extensions](https://developers.openai.com/plugins/build/extensions) 及其规范 [openai/mcp-extensions](https://github.com/openai/mcp-extensions/blob/main/docs/spec.md)。尚未在真实宿主中验证侧边栏显示与图标。
+
+## 代码结构
+
+按职责分层；App 与服务端只通过 `src/shared/schemas.ts` 共享数据形状。
+
+- `src/server/`：`server.ts` 只做组装；`config.ts` 读环境变量，`resources.ts` 注册 App 页面与图纸资源，`tools/` 按用途分为打开视图、读写数据和 @ 提及，`debug.ts` 是宿主探针。工具只校验参数并调用存储层。
+- `src/storage/drawings.ts`：落盘、加锁、备份和修订号规则，包括 `patch` 的元素合并。
+- `src/app/`：`App.tsx` 只组合界面；`host/` 负责宿主连接、模型上下文和本会话列表，`drawing/` 负责单张图的载入、自动保存、冲突和视图适配，`library/` 负责图纸列表，`ui/` 放文案、图标、字体与样式。
 
 ## 宿主探针（调试）
 

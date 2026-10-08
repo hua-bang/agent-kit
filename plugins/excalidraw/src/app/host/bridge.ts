@@ -1,5 +1,5 @@
 import { App } from '@modelcontextprotocol/ext-apps';
-import { messagesFor, pickLocale, storedLocale } from './i18n';
+import { messagesFor, pickLocale, storedLocale } from '../ui/i18n';
 export const bridge = new App({ name: 'Agentic Excalidraw', version: '0.1.0' }, {});
 export async function callTool<T>(name: string, args: Record<string, unknown> = {}): Promise<T> {
   const t = messagesFor(storedLocale() ?? pickLocale(bridge.getHostContext()?.locale));

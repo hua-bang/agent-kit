@@ -9,6 +9,17 @@ const MAX_BYTES = 4 * 1024 * 1024;
 export class ConflictError extends Error {
   constructor(public currentRevision: number) { super(`Revision conflict: current revision is ${currentRevision}. Read latest before retrying.`); }
 }
+type Element = Scene['elements'][number];
+/** Upsert elements by ID in place, append new ones, and drop removed IDs (removal wins). */
+export function patchElements(elements: Element[], upsert: Element[], removeIds: string[]): Element[] {
+  const changes = new Map(upsert.map(e => [e.id, e]));
+  const removed = new Set(removeIds);
+  const next = elements.filter(e => !removed.has(e.id)).map(e => {
+    const change = changes.get(e.id); changes.delete(e.id); return change ?? e;
+  });
+  for (const added of changes.values()) if (!removed.has(added.id)) next.push(added);
+  return next;
+}
 type Stat = Awaited<ReturnType<typeof lstat>>;
 // A file is unchanged while its inode, size, mtime and ctime are; atomic saves always replace the inode.
 const fingerprint = (stat: Stat) => `${stat.ino}:${stat.size}:${stat.mtimeMs}:${stat.ctimeMs}`;
@@ -117,5 +128,12 @@ export class DrawingStore {
       } catch (error) { console.error('Backup cleanup failed:', error); }
       return next;
     });
+  }
+  /** Element-level edit: untouched elements, files and app state are kept. Fails fast on a stale revision. */
+  async patch(id: string, expectedRevision: number, upsert: Element[], removeIds: string[]): Promise<Drawing> {
+    const doc = await this.read(id);
+    if (doc.plugin.revision !== expectedRevision) throw new ConflictError(doc.plugin.revision);
+    // save() re-checks the revision under the lock, so a write between read and save still conflicts.
+    return this.save(id, expectedRevision, { elements: patchElements(doc.elements, upsert, removeIds), appState: doc.appState, files: doc.files });
   }
 }
