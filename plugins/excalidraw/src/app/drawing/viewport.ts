@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type RefObject } from 'react';
 import type { ExcalidrawImperativeAPI } from '@excalidraw/excalidraw/types';
 
 /**
- * Fit each newly opened drawing, and refit on large resizes only until the user
+ * Fit each newly opened drawing, and refit on large resizes (either axis) only until the user
  * pans or zooms (sidebar tabs are resized often; their view is theirs).
  */
 export function useViewport(api: RefObject<ExcalidrawImperativeAPI | null>) {
@@ -21,11 +21,12 @@ export function useViewport(api: RefObject<ExcalidrawImperativeAPI | null>) {
     return () => clearTimeout(timer);
   }, [editorKey]);
   useEffect(() => {
-    let previousWidth = window.innerWidth;
+    let previous = { width: window.innerWidth, height: window.innerHeight };
     let timer: ReturnType<typeof setTimeout>;
     const resize = () => {
-      if (Math.abs(window.innerWidth - previousWidth) < 100) return;
-      previousWidth = window.innerWidth;
+      // Height counts too: a card the host expands to fullscreen should refit, not keep its old center.
+      if (Math.abs(window.innerWidth - previous.width) < 100 && Math.abs(window.innerHeight - previous.height) < 100) return;
+      previous = { width: window.innerWidth, height: window.innerHeight };
       clearTimeout(timer);
       timer = setTimeout(() => { if (api.current && !moved.current) fit(api.current, true); }, 150);
     };

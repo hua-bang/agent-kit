@@ -126,7 +126,7 @@ try {
   const libraryContext = await page.evaluate(() => window.modelContext);
   assert.match(libraryContext.content[0].text, /独立副本/);
   assert.ok(libraryContext.structuredContent.drawings.some(d => d.id === copy.id), 'Model context lists drawing IDs');
-  assert.equal(libraryContext.content[0]._meta['openai/title'], 'Agentic Excalidraw 图纸库 · 2 张');
+  assert.equal(libraryContext.content[0]._meta['openai/title'], 'Agentic Excalidraw · 2 张');
   // A removed attachment stays removed while the view is unchanged, and returns when the view changes.
   await page.evaluate(() => { window.removeModelContext(); window.modelContext = undefined; });
   await frame.getByRole('button', { name: '刷新', exact: true }).click();
@@ -134,7 +134,7 @@ try {
   assert.equal(await page.evaluate(() => window.modelContext), undefined, 'Removed context is not re-added on refresh');
   await frame.getByLabel('搜索图纸').fill('独立');
   await page.waitForFunction(() => window.modelContext?.structuredContent?.query === '独立');
-  assert.equal(await page.evaluate(() => window.modelContext.content[0]._meta['openai/title']), 'Agentic Excalidraw 图纸库 · 1/2 张');
+  assert.equal(await page.evaluate(() => window.modelContext.content[0]._meta['openai/title']), 'Agentic Excalidraw · 1/2 张');
   await frame.getByLabel('搜索图纸').fill('');
   await frame.getByLabel('搜索图纸').fill('不存在的图纸');
   await frame.getByText('没有匹配的图纸。').waitFor();
@@ -158,6 +158,8 @@ try {
   await frame.locator('.excalidraw canvas.interactive').first().waitFor();
   assert.equal(await frame.getByLabel('图纸库', { exact: true }).count(), 0);
   assert.equal(await frame.getByRole('button', { name: '图纸列表', exact: true }).count(), 0);
+  // The 850px test frame is taller than the card: the editor keeps its own height instead of stretching.
+  assert.equal(await frame.locator('.editor').evaluate(el => el.offsetHeight), 600, 'Inline card editor is not stretched by a tall frame');
   assert.equal(await frame.locator('.scene-preview').count(), 0);
   // Hand-drawn fonts load despite the CSP refusing data: fonts, and CJK has a system-font alias.
   const fontState = await page.frames()[1].evaluate(async () => {

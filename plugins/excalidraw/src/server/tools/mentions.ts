@@ -7,7 +7,7 @@ import { describeDrawing } from '../resources.js';
 // OpenAI composer at-mentions: the host calls this as the user types "@…"; it is hidden from the model.
 export function registerMentionTool(server: McpServer, store: DrawingStore) {
   server.registerTool('mention_drawings', {
-    title: 'Agentic Excalidraw 图纸',
+    title: 'Agentic Excalidraw',
     description: 'Typeahead search for @-mentioning local drawings. Called by the host composer, not by the model.',
     inputSchema: { query: z.string().max(200).default('') },
     annotations: readonly,

@@ -15,12 +15,12 @@ export function registerViewTools(server: McpServer, store: DrawingStore) {
   // Sidebar: one library for the whole app. The side panel is a separate tool and page, because an
   // App cannot tell which entrypoint opened it, and only the panel belongs to one conversation.
   registerAppTool(server, 'open_library', {
-    title: 'Agentic Excalidraw 图纸库', description: 'Open the dedicated local drawing library, intended for the Sidebar. If the host cannot show it, this explicit library tool can open a library App. Use open_drawing for conversation cards.',
+    title: 'Agentic Excalidraw', description: 'Open the dedicated local drawing library, intended for the Sidebar. If the host cannot show it, this explicit library tool can open a library App. Use open_drawing for conversation cards.',
     inputSchema: {}, annotations: readonly,
     _meta: { ui: { resourceUri: LIBRARY_URI }, ...(config.sidebar ? { 'openai/ui': { entrypoints: [{ type: 'global' }] } } : {}) },
   }, () => guarded(async () => ({ view: 'library', ...await store.list() })));
   if (config.thread) registerAppTool(server, 'open_panel', {
-    title: 'Agentic Excalidraw 本会话图纸', description: 'Open the drawing library beside this conversation. Drawings opened there are grouped as this conversation\'s. Opened by the user from the conversation side panel.',
+    title: 'Agentic Excalidraw', description: 'Open the drawing library beside this conversation. Drawings opened there are grouped as this conversation\'s. Opened by the user from the conversation side panel.',
     inputSchema: {}, annotations: readonly,
     _meta: { ui: { resourceUri: PANEL_URI }, 'openai/ui': { entrypoints: [{ type: 'thread' }] } },
   }, () => guarded(async () => ({ view: 'library', ...await store.list() })));
