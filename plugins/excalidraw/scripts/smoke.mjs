@@ -24,8 +24,8 @@ try {
   assert.equal(tools.tools.find(t => t.name === 'mention_drawings').title, 'Agentic Excalidraw 图纸');
   const resources = await client.listResources(); assert.equal(resources.resources.length, 2);
   assert.equal(tools.tools.find(t => t.name === 'open_library')._meta.ui.resourceUri, 'ui://excalidraw/library.html');
-  // Sidebar (global) entrypoint is on by default, with a monochrome SVG server icon.
-  assert.deepEqual(tools.tools.find(t => t.name === 'open_library')._meta['openai/ui'], { entrypoints: [{ type: 'global' }] });
+  // Sidebar (global) and conversation panel (thread) entrypoints are on by default, with a monochrome SVG server icon.
+  assert.deepEqual(tools.tools.find(t => t.name === 'open_library')._meta['openai/ui'], { entrypoints: [{ type: 'global' }, { type: 'thread' }] });
   const icon = client.getServerVersion().icons[0];
   assert.equal(icon.mimeType, 'image/svg+xml');
   assert.match(Buffer.from(icon.src.split(',')[1], 'base64').toString(), /viewBox="0 0 20 20"[^>]*stroke="currentColor"/);

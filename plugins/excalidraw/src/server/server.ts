@@ -21,6 +21,11 @@ const DRAWING_MIME = 'application/vnd.excalidraw+json';
 export function createServer(store = new DrawingStore(), htmlPath = new URL('../ui/index.html', import.meta.url)) {
   const server = new McpServer({ name: 'local-excalidraw', title: 'Agentic Excalidraw', version: '0.1.0', icons: [SIDEBAR_ICON] });
   const ui = { resourceUri: UI_URI };
+  const debug = !!process.env.EXCALIDRAW_DEBUG_LOG;
+  const entrypoints = [
+    ...(process.env.EXCALIDRAW_ENABLE_SIDEBAR === '0' ? [] : [{ type: 'global' }]),
+    ...(process.env.EXCALIDRAW_ENABLE_THREAD === '0' ? [] : [{ type: 'thread' }]),
+  ];
   const readonly = { readOnlyHint: true, openWorldHint: false };
   const writable = { readOnlyHint: false, destructiveHint: false, openWorldHint: false };
   const result = (data: Record<string, unknown>) => ({
@@ -40,7 +45,7 @@ export function createServer(store = new DrawingStore(), htmlPath = new URL('../
   for (const [uri, surface] of [[UI_URI, 'drawing'], [LIBRARY_URI, 'library']] as const) {
     registerAppResource(server, `Agentic Excalidraw ${surface}`, uri, {}, async () => ({ contents: [{
       uri, mimeType: RESOURCE_MIME_TYPE,
-      text: (await readFile(htmlPath, 'utf8')).replace('<head>', `<head><meta name="excalidraw-surface" content="${surface}">`),
+      text: (await readFile(htmlPath, 'utf8')).replace('<head>', `<head><meta name="excalidraw-surface" content="${surface}">${debug ? '<meta name="excalidraw-debug" content="1">' : ''}`),
       _meta: { ui: { prefersBorder: true, csp: { connectDomains: [], resourceDomains: [] } } },
     }] }));
   }
@@ -76,10 +81,16 @@ export function createServer(store = new DrawingStore(), htmlPath = new URL('../
     }
   });
   registerAppTool(server, 'open_library', {
-    title: 'Agentic Excalidraw 图纸库', description: 'Open the dedicated local drawing library, intended for Sidebar. If the host cannot show Sidebar, this explicit library tool can open a library App. Use open_drawing for conversation cards.',
+    title: 'Agentic Excalidraw 图纸库', description: 'Open the dedicated local drawing library, intended for the Sidebar and the conversation side panel. If the host cannot show either, this explicit library tool can open a library App. Use open_drawing for conversation cards.',
     inputSchema: {}, annotations: readonly,
-    _meta: { ui: { resourceUri: LIBRARY_URI }, ...(process.env.EXCALIDRAW_ENABLE_SIDEBAR === '0' ? {} : { 'openai/ui': { entrypoints: [{ type: 'global' }] } }) },
+    _meta: { ui: { resourceUri: LIBRARY_URI }, ...(entrypoints.length ? { 'openai/ui': { entrypoints } } : {}) },
   }, () => guarded(async () => ({ view: 'library', ...await store.list() })));
+  // Host probe, only with EXCALIDRAW_DEBUG_LOG: the app reports its host context here so it lands in the log.
+  if (debug) server.registerTool('debug_host_context', {
+    description: 'Debug only: records the app host context. Called by the app, not by the model.',
+    inputSchema: { surface: z.string(), hostContext: z.unknown() }, annotations: readonly,
+    _meta: { ui: { visibility: ['app'] } },
+  }, () => ({ content: [] }));
   server.registerTool('list_drawings', { description: 'List locally saved drawings without opening a UI.', inputSchema: {}, annotations: readonly },
     () => guarded(() => store.list()));
   registerAppTool(server, 'open_drawing', {
