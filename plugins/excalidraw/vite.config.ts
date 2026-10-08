@@ -55,7 +55,7 @@ function lightweightBudget(): Plugin {
   };
 }
 export default defineConfig({
-  resolve: { alias: [{ find: /^@excalidraw\/mermaid-to-excalidraw$/, replacement: resolve(import.meta.dirname, 'src/app/mermaid-text-fallback.ts') }] },
+  resolve: { alias: [{ find: /^@excalidraw\/mermaid-to-excalidraw$/, replacement: resolve(import.meta.dirname, 'src/app/ui/mermaid-text-fallback.ts') }] },
   plugins: [withoutMermaidMenu(), localFonts(), react(), viteSingleFile(), lightweightBudget(), thirdPartyNotices()],
   build: { outDir: 'dist/ui', assetsInlineLimit: 100_000_000, cssCodeSplit: false },
 });

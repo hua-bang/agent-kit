@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { mkdtemp, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { DrawingStore, ConflictError } from '../src/storage/drawings';
+import { DrawingStore, ConflictError, patchElements } from '../src/storage/drawings';
 import { emptyScene, sceneSchema } from '../src/shared/schemas';
 let root: string;
 let store: DrawingStore;
@@ -74,5 +74,22 @@ describe('local drawing storage', () => {
     expect(() => sceneSchema.parse({ ...emptyScene, elements: [box, box] })).toThrow();
     expect(() => sceneSchema.parse({ ...emptyScene, elements: [{ ...box, type: 'image', fileId: 'remote' }] })).toThrow();
     expect(() => sceneSchema.parse({ ...emptyScene, elements: [{ ...box, type: 'iframe' }] })).toThrow();
+  });
+});
+describe('patchElements', () => {
+  const a = { ...box, id: 'a' }, b = { ...box, id: 'b' }, c = { ...box, id: 'c' };
+  it('replaces in place, appends new elements and removes IDs', () => {
+    expect(patchElements([a, b], [{ ...a, x: 1 }, c], ['b'])).toEqual([{ ...a, x: 1 }, c]);
+  });
+  it('lets removal win over an upsert of the same ID', () => {
+    expect(patchElements([a], [{ ...b }], ['a', 'b'])).toEqual([]);
+  });
+});
+describe('patch', () => {
+  it('keeps untouched elements and rejects stale revisions', async () => {
+    const doc = await store.create('patch', { ...emptyScene, elements: [box] });
+    const next = await store.patch(doc.plugin.id, 1, [{ ...box, id: 'new' }], []);
+    expect(next.elements.map(e => e.id)).toEqual(['box', 'new']);
+    await expect(store.patch(doc.plugin.id, 1, [], ['box'])).rejects.toBeInstanceOf(ConflictError);
   });
 });

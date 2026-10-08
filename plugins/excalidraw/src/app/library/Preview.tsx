@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { exportToBlob, restore } from '@excalidraw/excalidraw';
-import { callTool } from './bridge';
-import type { Messages, PreviewState } from './i18n';
+import { callTool } from '../host/bridge';
+import type { Messages, PreviewState } from '../ui/i18n';
 import { cachedThumbnail, thumbnail, thumbnailKey } from './thumbnails';
-import { sceneOf, type Drawing, type DrawingSummary } from '../shared/schemas';
+import { sceneOf, type Drawing, type DrawingSummary } from '../../shared/schemas';
 
 /** Library thumbnail, rasterized with the real SDK; never inject drawing text as HTML or SVG. */
 export function Preview({ summary, dark = false, t }: { summary: DrawingSummary; dark?: boolean; t: Messages }) {

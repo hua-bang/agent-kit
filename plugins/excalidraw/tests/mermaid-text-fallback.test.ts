@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseMermaidToExcalidraw } from '../src/app/mermaid-text-fallback';
+import { parseMermaidToExcalidraw } from '../src/app/ui/mermaid-text-fallback';
 
 describe('Mermaid-free clipboard compatibility', () => {
   it.each([
