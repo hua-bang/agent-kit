@@ -48,9 +48,21 @@ export function useHost(handlers: Handlers) {
   return { connected, theme, hostLocale };
 }
 
-/** A host-fixed height (sidebar, fullscreen) means the editor should fit it, not grow past it. */
+/** Shortest fixed height that still holds the inline card at its own size (header + editor). */
+const INLINE_CARD_HEIGHT = 660;
+
+/**
+ * A host-fixed height (sidebar, fullscreen) means the editor should fit it, not grow past it.
+ * An inline drawing card keeps its own height instead: the host sizes the frame from what the
+ * card reports, so a tall frame never stretches the editor.
+ */
 function applyFill() {
   const context = bridge.getHostContext();
-  const fixed = !!context?.containerDimensions && 'height' in context.containerDimensions || context?.displayMode === 'fullscreen';
-  document.documentElement.toggleAttribute('data-fill', fixed);
+  const dimensions = context?.containerDimensions;
+  const height = dimensions && 'height' in dimensions ? dimensions.height : undefined;
+  const surface = document.querySelector('meta[name="excalidraw-surface"]')?.getAttribute('content') ?? 'drawing';
+  const inlineCard = surface === 'drawing' && context?.displayMode !== 'fullscreen';
+  const fill = context?.displayMode === 'fullscreen' || height !== undefined && (!inlineCard || height < INLINE_CARD_HEIGHT);
+  document.documentElement.toggleAttribute('data-fill', fill);
+  document.documentElement.toggleAttribute('data-inline', inlineCard && !fill);
 }

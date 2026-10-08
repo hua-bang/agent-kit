@@ -126,6 +126,11 @@ html, body, #root { height: 100%; }
 .app > .editor { flex: 1 0 auto; height: 600px; min-height: 400px; }
 /* Host-fixed frame (sidebar, fullscreen): fit the editor inside it instead. */
 [data-fill] .app > .editor { flex: 1 1 0; height: auto; min-height: 320px; }
+/* Inline card: size to content, so the reported height follows the editor (auto-resize
+   observes <html> and <body>, which do not change size while they are 100% of the frame). */
+[data-inline], [data-inline] body, [data-inline] #root { height: auto; }
+[data-inline] .app { min-height: 0; }
+[data-inline] .app > .editor { flex-grow: 0; min-height: 0; }
 .app > .editor { transition: opacity .3s ease, transform .3s ease; transform-origin: 50% 40%; }
 .app > .editor.is-fitting { opacity: 0; transform: scale(.985); transition: none; }
 /* Placeholder stays blank for a quick load, so cards do not flash two status lines. */

@@ -20,8 +20,9 @@ try {
   assert.equal(client.getServerVersion().name, 'local-excalidraw');
   assert.equal(client.getServerVersion().title, 'Agentic Excalidraw');
   const tools = await client.listTools(); assert.equal(tools.tools.length, 9);
-  assert.equal(tools.tools.find(t => t.name === 'open_library').title, 'Agentic Excalidraw 图纸库');
-  assert.equal(tools.tools.find(t => t.name === 'mention_drawings').title, 'Agentic Excalidraw 图纸');
+  assert.equal(tools.tools.find(t => t.name === 'open_library').title, 'Agentic Excalidraw');
+  assert.equal(tools.tools.find(t => t.name === 'open_panel').title, 'Agentic Excalidraw');
+  assert.equal(tools.tools.find(t => t.name === 'mention_drawings').title, 'Agentic Excalidraw');
   const resources = await client.listResources(); assert.equal(resources.resources.length, 3);
   assert.equal(tools.tools.find(t => t.name === 'open_library')._meta.ui.resourceUri, 'ui://excalidraw/library.html');
   // Sidebar (global) and conversation panel (thread) entrypoints are on by default, on separate tools, with a monochrome SVG server icon.
