@@ -17,7 +17,10 @@ import type { Drawing } from '../shared/schemas';
  */
 export function App() {
   // Entry surface is assigned by the resource, never inferred from a session or viewport.
-  const isLibrary = document.querySelector('meta[name="excalidraw-surface"]')?.getAttribute('content') === 'library';
+  // The conversation panel is the library plus a "this conversation" group.
+  const surface = document.querySelector('meta[name="excalidraw-surface"]')?.getAttribute('content');
+  const isPanel = surface === 'panel';
+  const isLibrary = surface === 'library' || isPanel;
   const [notice, setNotice] = useState('');
   const [query, setQuery] = useState('');
   const [busy, setBusy] = useState(false);
@@ -35,14 +38,14 @@ export function App() {
     hostContextChanged(context) { modelContext.hostContextChanged(context); },
     connected() {
       drawing.setStatus('connected');
-      if (isLibrary) session.restore();
+      if (isPanel) session.restore();
       // A tool result may arrive with the handshake. Do not replace its document.
       if (isLibrary) void library.refresh();
     },
     failed(message) { drawing.setError(t.connectFailed(message)); drawing.setStatus('disconnected'); },
   });
   const { locale, t, toggle: toggleLocale } = useLocale(host.hostLocale);
-  const drawing = useDrawing({ connected: host.connected, isLibrary, t, onLoaded: isLibrary ? session.remember : undefined });
+  const drawing = useDrawing({ connected: host.connected, isLibrary, t, onLoaded: isPanel ? session.remember : undefined });
   const { doc, error } = drawing;
   const library = useLibrary(host.connected, isLibrary && !doc, message => drawing.setError(message));
   const modelContext = useModelContext(host.connected, { t, isLibrary, doc, library: library.library, query, session: session.session });

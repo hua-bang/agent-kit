@@ -1,5 +1,7 @@
 export const UI_URI = 'ui://excalidraw/editor.html';
 export const LIBRARY_URI = 'ui://excalidraw/library.html';
+// The library as a conversation side panel: same page, plus a "this conversation" group.
+export const PANEL_URI = 'ui://excalidraw/panel.html';
 // Each drawing is also a readable resource, so @-mentions and resource links resolve to its content.
 export const drawingUri = (id: string) => `excalidraw://drawings/${id}`;
 export const DRAWING_MIME = 'application/vnd.excalidraw+json';

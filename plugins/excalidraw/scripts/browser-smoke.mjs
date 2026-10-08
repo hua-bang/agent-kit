@@ -119,6 +119,8 @@ try {
   await frame.getByRole('button', { name: '图纸列表', exact: true }).click();
   await frame.getByRole('button', { name: /独立副本/ }).waitFor();
   assert.equal(await frame.getByText('已打开独立副本，原图保持不变。').count(), 0, 'Copy notice does not linger on the list');
+  // Only the conversation panel groups drawings by conversation; the Sidebar library stays one list.
+  assert.equal(await frame.locator('.group-title').count(), 0, 'Sidebar library has no conversation group');
   // The library reports its visible drawings to the model (ui/update-model-context).
   await page.waitForFunction(() => window.modelContext?.structuredContent?.view === 'library' && window.modelContext.structuredContent.total === 2);
   const libraryContext = await page.evaluate(() => window.modelContext);

@@ -182,7 +182,7 @@ npm run test:browser
 
 `open_library` 默认带 `openai/ui.entrypoints: [{type: "global"}]` 元数据，支持的 OpenAI 宿主会把图纸库放进侧边栏，以带输入框的标签页打开；页面上下文进入该标签页自己的会话。在服务进程设置 `EXCALIDRAW_ENABLE_SIDEBAR=0` 可关闭。
 
-同一工具默认还带 `{type: "thread"}`，支持的宿主会在会话侧面板打开图纸库，每个会话一个实例；设置 `EXCALIDRAW_ENABLE_THREAD=0` 可关闭。宿主不提供会话标识，所以面板把“在此面板打开过的图纸”记为本会话列表，排在“最近”之前，并随模型上下文上报；宿主在重新挂载时交还该上下文，列表随之恢复。用户删除上下文附件后列表清空。AI 在消息卡片里新建的图不会自动加入，需从“最近”打开一次。尚未在真实宿主中验证侧面板。
+会话侧面板是另一个工具 `open_panel`，带 `{type: "thread"}` 入口和独立页面 `ui://excalidraw/panel.html`，每个会话一个实例；设置 `EXCALIDRAW_ENABLE_THREAD=0` 可关闭。App 无法知道自己由哪个入口打开，所以侧边栏和侧面板分成两个工具与页面，只有侧面板分组。宿主不提供会话标识，所以面板把“在此面板打开过的图纸”记为本会话列表，排在“最近”之前，并随模型上下文上报；宿主在重新挂载时交还该上下文，列表随之恢复。用户删除上下文附件后列表清空。AI 在消息卡片里新建的图不会自动加入，需从“最近”打开一次。尚未在真实宿主中验证侧面板。
 侧边栏图标来自服务端 `serverInfo.icons`（单色 SVG、`currentColor`、20×20 视口、1.33px 描边）；当前 MCP SDK 不输出工具级 `icons`，按规范宿主会回退到服务端图标。
 该入口使用 `ui://excalidraw/library.html`，先进入图纸列表，再进入详情。对话图纸使用 `ui://excalidraw/editor.html`，直接进入编辑器。两者共用真实数据与构建包，不支持该扩展的宿主会忽略这项元数据。
 参考 [OpenAI Extensions](https://developers.openai.com/plugins/build/extensions) 及其规范 [openai/mcp-extensions](https://github.com/openai/mcp-extensions/blob/main/docs/spec.md)。尚未在真实宿主中验证侧边栏显示与图标。
@@ -191,7 +191,7 @@ npm run test:browser
 
 按职责分层；App 与服务端只通过 `src/shared/schemas.ts` 共享数据形状。
 
-- `src/server/`：`server.ts` 只做组装；`config.ts` 读环境变量，`resources.ts` 注册 App 页面与图纸资源，`tools/` 按用途分为打开视图、读写数据和 @ 提及，`debug.ts` 是宿主探针。工具只校验参数并调用存储层。
+- `src/server/`：`server.ts` 只做组装；`config.ts` 读环境变量，`resources.ts` 注册 App 页面与图纸资源，`tools/` 按用途分为打开视图（图纸库、会话侧面板、对话卡片）、读写数据和 @ 提及，`debug.ts` 是宿主探针。工具只校验参数并调用存储层。
 - `src/storage/drawings.ts`：落盘、加锁、备份和修订号规则，包括 `patch` 的元素合并。
 - `src/app/`：`App.tsx` 只组合界面；`host/` 负责宿主连接、模型上下文和本会话列表，`drawing/` 负责单张图的载入、自动保存、冲突和视图适配，`library/` 负责图纸列表，`ui/` 放文案、图标、字体与样式。
 

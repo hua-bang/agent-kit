@@ -4,14 +4,14 @@ import { registerAppResource, RESOURCE_MIME_TYPE } from '@modelcontextprotocol/e
 import type { DrawingStore } from '../storage/drawings.js';
 import { idSchema, type Drawing } from '../shared/schemas.js';
 import { config } from './config.js';
-import { DRAWING_MIME, LIBRARY_URI, UI_URI, drawingUri } from './constants.js';
+import { DRAWING_MIME, LIBRARY_URI, PANEL_URI, UI_URI, drawingUri } from './constants.js';
 
 export const describeDrawing = (d: Drawing['plugin']) => `Revision ${d.revision}, updated ${d.updatedAt}`;
 
 /** The two App pages share one build; a meta tag tells the page which surface it is. */
 export function registerAppPages(server: McpServer, htmlPath: URL) {
   const debug = config.debugLog ? '<meta name="excalidraw-debug" content="1">' : '';
-  for (const [uri, surface] of [[UI_URI, 'drawing'], [LIBRARY_URI, 'library']] as const) {
+  for (const [uri, surface] of [[UI_URI, 'drawing'], [LIBRARY_URI, 'library'], [PANEL_URI, 'panel']] as const) {
     registerAppResource(server, `Agentic Excalidraw ${surface}`, uri, {}, async () => ({ contents: [{
       uri, mimeType: RESOURCE_MIME_TYPE,
       text: (await readFile(htmlPath, 'utf8')).replace('<head>', `<head><meta name="excalidraw-surface" content="${surface}">${debug}`),
