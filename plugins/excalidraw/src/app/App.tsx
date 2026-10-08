@@ -116,6 +116,9 @@ export function App() {
       setLocale(pickLocale(bridge.getHostContext()?.locale));
       applyFill();
       setConnected(true); setStatus('connected');
+      if (document.querySelector('meta[name="excalidraw-debug"]')) {
+        void bridge.callServerTool({ name: 'debug_host_context', arguments: { surface: isLibrary ? 'library' : 'drawing', hostContext: bridge.getHostContext() ?? null } }).catch(() => {});
+      }
       // A tool result may arrive with the handshake. Do not replace its document.
       if (isLibrary) void refreshLibrary();
     }).catch(e => { setError(tRef.current.connectFailed(e.message)); setStatus('disconnected'); });

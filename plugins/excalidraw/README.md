@@ -185,6 +185,15 @@ npm run test:browser
 该入口使用 `ui://excalidraw/library.html`，先进入图纸列表，再进入详情。对话图纸使用 `ui://excalidraw/editor.html`，直接进入编辑器。两者共用真实数据与构建包，不支持该扩展的宿主会忽略这项元数据。
 参考 [OpenAI Extensions](https://developers.openai.com/plugins/build/extensions) 及其规范 [openai/mcp-extensions](https://github.com/openai/mcp-extensions/blob/main/docs/spec.md)。尚未在真实宿主中验证侧边栏显示与图标。
 
+## 宿主探针（调试）
+
+用于实测宿主在规范之外传了什么，例如是否带会话标识。默认全部关闭。
+
+- `EXCALIDRAW_ENABLE_THREAD=1`：给 `open_library` 追加 `{type: "thread"}` 入口，图纸库出现在会话侧面板。实验开关，尚未在真实宿主验证。
+- `EXCALIDRAW_DEBUG_LOG=<绝对路径>`：服务端把每个请求的 method、工具名和 `_meta` 逐行追加到该文件（JSON Lines）；App 连接后把 `hostContext` 通过仅 App 可见的 `debug_host_context` 工具写入同一文件。日志可能含本机路径和图纸标题，不要提交。
+
+环境变量必须进入宿主启动的 MCP 进程；桌面启动器不一定继承终端环境。
+
 ## 宣传素材
 
 `promo/` 保存宣传片与官网的生成脚本、案例和页面源码，用真实插件录制，产物写入被忽略的 `promo/out/`。说明见 [promo/README.md](promo/README.md)，通用做法见仓库内部的 [mcp-app-promo skill](../../.agents/skills/mcp-app-promo/SKILL.md)。`promo/` 不在 release 打包范围内。
