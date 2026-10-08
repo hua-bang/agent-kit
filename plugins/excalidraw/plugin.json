@@ -3,5 +3,10 @@
   "name": "excalidraw",
   "version": "0.1.0",
   "description": "Agentic Excalidraw: an unofficial, local-first plugin for users and agents to edit drawings together, with a bundled skill, stdio MCP server and interactive MCP App. Not affiliated with or endorsed by the Excalidraw team. Install the prebuilt release branch, or build from source.",
-  "keywords": ["excalidraw", "diagram", "local-first", "mcp-app"]
+  "keywords": ["excalidraw", "diagram", "local-first", "mcp-app"],
+  "extensions": {
+    "com.openai": {
+      "interface": { "displayName": "Agentic Excalidraw", "shortDescription": "Local drawings you and the agent edit together", "category": "Productivity" }
+    }
+  }
 }
