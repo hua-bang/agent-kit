@@ -23,4 +23,9 @@ export function registerDrawingTools(server: McpServer, store: DrawingStore) {
     inputSchema: { id: idSchema, expectedRevision: z.number().int().positive(), upsert: z.array(elementSchema).max(20_000).default([]), removeIds: z.array(z.string()).default([]) },
     annotations: { ...writable, destructiveHint: true },
   }, ({ id, expectedRevision, upsert, removeIds }) => guarded(async () => ({ document: await store.patch(id, expectedRevision, upsert, removeIds) })));
+  server.registerTool('delete_drawing', {
+    description: 'Delete a drawing only when the user explicitly asks. Requires expectedRevision from the latest read or list. The file moves to the local trash folder and is no longer listed.',
+    inputSchema: { id: idSchema, expectedRevision: z.number().int().positive() },
+    annotations: { ...writable, destructiveHint: true },
+  }, ({ id, expectedRevision }) => guarded(async () => ({ deleted: await store.delete(id, expectedRevision) })));
 }

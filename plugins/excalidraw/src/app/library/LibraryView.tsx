@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from 'react';
 import type { McpUiTheme } from '@modelcontextprotocol/ext-apps';
 import type { Locale, Messages } from '../ui/i18n';
-import { IconCanvas, IconLanguage, IconPlus, IconRefresh, IconSearch } from '../ui/icons';
+import { IconCanvas, IconLanguage, IconPlus, IconRefresh, IconSearch, IconTrash } from '../ui/icons';
 import type { DrawingSummary } from '../../shared/schemas';
 import { Preview } from './Preview';
 import type { Library } from './useLibrary';
@@ -16,22 +16,35 @@ type Props = {
   onOpen(id: string): void;
   /** Create and open a drawing; `created` runs only on success. */
   onCreate(title: string, created: () => void): void;
+  /** Delete a drawing after the user confirmed on its card. */
+  onDelete(drawing: DrawingSummary): void;
   onRefresh(): void;
   toggleLocale(): void;
   messages: ReactNode;
 };
 
-export function LibraryView({ library, session, query, setQuery, t, locale, theme, connected, busy, refreshing, failed, onOpen, onCreate, onRefresh, toggleLocale, messages }: Props) {
+export function LibraryView({ library, session, query, setQuery, t, locale, theme, connected, busy, refreshing, failed, onOpen, onCreate, onDelete, onRefresh, toggleLocale, messages }: Props) {
   const [limit, setLimit] = useState(20);
   const [newTitle, setNewTitle] = useState('');
+  // The card awaiting delete confirmation. Inline, because sandboxed host frames may block window.confirm.
+  const [confirming, setConfirming] = useState<string | null>(null);
   const matches = library?.drawings.filter(d => d.title.toLocaleLowerCase().includes(query.toLocaleLowerCase())) ?? [];
   // Without a search, drawings opened in this panel come first; a search always shows one flat list.
   const pinned = query ? [] : session.flatMap(id => matches.filter(d => d.id === id));
   const others = matches.filter(d => !pinned.includes(d));
-  const card = (d: DrawingSummary) => <button className="drawing" key={d.id} disabled={busy || refreshing} onClick={() => onOpen(d.id)}>
-    <Preview summary={d} dark={theme === 'dark'} t={t} />
-    <span className="drawing-info"><strong>{d.title}</strong><span className="meta">{relativeTime(d.updatedAt, locale, t)}</span></span>
-  </button>;
+  const card = (d: DrawingSummary) => <div className="drawing-card" key={d.id}>
+    <button className="drawing" disabled={busy || refreshing} onClick={() => onOpen(d.id)}>
+      <Preview summary={d} dark={theme === 'dark'} t={t} />
+      <span className="drawing-info"><strong>{d.title}</strong><span className="meta">{relativeTime(d.updatedAt, locale, t)}</span></span>
+    </button>
+    {confirming === d.id
+      ? <div className="delete-confirm" role="group" aria-label={t.deleteLabel(d.title)} onKeyDown={e => { if (e.key === 'Escape') setConfirming(null); }}>
+        <span>{t.deletePrompt}</span>
+        <button type="button" className="tool" autoFocus onClick={() => setConfirming(null)}>{t.cancel}</button>
+        <button type="button" className="danger" disabled={!connected || busy} onClick={() => { setConfirming(null); onDelete(d); }}>{t.delete}</button>
+      </div>
+      : <button type="button" className="tool icon-button card-delete" aria-label={t.deleteLabel(d.title)} title={t.delete} disabled={!connected || busy} onClick={() => setConfirming(d.id)}><IconTrash /></button>}
+  </div>;
   return <>
     <header className="library-head" aria-label="Agentic Excalidraw">
       <h1>{t.library}</h1>

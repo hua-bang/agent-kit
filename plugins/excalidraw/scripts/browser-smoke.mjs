@@ -41,6 +41,8 @@ try {
   page.on('request', req => { if (/^https?:/.test(req.url()) && !req.url().startsWith('http://127.0.0.1:')) external.push(req.url()); });
   await page.goto(`http://127.0.0.1:${http.address().port}`);
   const frame = page.frameLocator('iframe');
+  // A library card's open button (each card also has a delete button labelled with its title).
+  const card = title => frame.locator('button.drawing', { hasText: title });
   // Drawing actions live in Excalidraw's main menu, not the header.
   const until = async (check, timeout = 9000) => {
     for (const end = Date.now() + timeout; !(await check());) {
@@ -105,8 +107,8 @@ try {
   const overflow = await page.frames()[1].evaluate(() => document.documentElement.scrollWidth > innerWidth);
   assert.equal(overflow, false, 'No horizontal document overflow at 375px');
   await frame.getByRole('button', { name: '图纸列表', exact: true }).click();
-  await frame.getByRole('button', { name: /浏览器实际编辑验证/ }).waitFor();
-  await frame.getByRole('button', { name: /浏览器实际编辑验证/ }).click();
+  await card('浏览器实际编辑验证').waitFor();
+  await card('浏览器实际编辑验证').click();
   await frame.getByLabel('图纸名称', { exact: true }).waitFor({ timeout: 12000 }).catch(async e => { console.error(await frame.locator('body').innerText()); throw e; });
   // Library copy creates independent identity and keeps the original untouched.
   assert.equal(await frame.getByRole('button', { name: '保存', exact: true }).count(), 0, 'Save button hidden while autosaved');
@@ -117,7 +119,7 @@ try {
   const copy = copies.find(d => d.id !== id);
   await frame.getByLabel('图纸名称', { exact: true }).fill('独立副本');
   await frame.getByRole('button', { name: '图纸列表', exact: true }).click();
-  await frame.getByRole('button', { name: /独立副本/ }).waitFor();
+  await card('独立副本').waitFor();
   assert.equal(await frame.getByText('已打开独立副本，原图保持不变。').count(), 0, 'Copy notice does not linger on the list');
   // Only the conversation panel groups drawings by conversation; the Sidebar library stays one list.
   assert.equal(await frame.locator('.group-title').count(), 0, 'Sidebar library has no conversation group');
@@ -142,7 +144,20 @@ try {
   await frame.locator('.drawing img').first().waitFor();
   // A drawing created from chat appears in the open list without pressing refresh.
   await client.callTool({ name: 'create_drawing', arguments: { title: 'Agent 新建的图', scene: { elements: [{ id: 'agent-box', type: 'rectangle', x: 0, y: 0, width: 160, height: 90 }] } } });
-  await frame.getByRole('button', { name: /Agent 新建的图/ }).waitFor({ timeout: 9000 });
+  await card('Agent 新建的图').waitFor({ timeout: 9000 });
+  // Delete from the card asks inline first; cancel keeps it, confirm moves it out of the list.
+  await card('Agent 新建的图').hover();
+  await frame.getByRole('button', { name: '删除「Agent 新建的图」' }).click();
+  await page.screenshot({ path: '.test-output/library-delete-confirm.png' });
+  await frame.getByRole('button', { name: '取消', exact: true }).click();
+  assert.equal(await card('Agent 新建的图').count(), 1, 'Cancel keeps the drawing');
+  await frame.getByRole('button', { name: '删除「Agent 新建的图」' }).click();
+  await frame.getByRole('group', { name: '删除「Agent 新建的图」' }).getByRole('button', { name: '删除', exact: true }).click();
+  await frame.getByText('已删除「Agent 新建的图」').waitFor();
+  assert.equal(await card('Agent 新建的图').count(), 0, 'Deleted drawing leaves the list');
+  assert.equal((await client.callTool({ name: 'list_drawings', arguments: {} })).structuredContent.drawings.length, 2);
+  await client.callTool({ name: 'create_drawing', arguments: { title: 'Agent 新建的图', scene: { elements: [{ id: 'agent-box', type: 'rectangle', x: 0, y: 0, width: 160, height: 90 }] } } });
+  await card('Agent 新建的图').waitFor({ timeout: 9000 });
   await page.screenshot({ path: '.test-output/library-mobile.png' });
   await page.setViewportSize({ width: 1200, height: 950 });
   await page.screenshot({ path: '.test-output/library-desktop.png' });
@@ -266,7 +281,7 @@ try {
   // English host locale: UI text and Excalidraw's own language follow it.
   await page.goto(`http://127.0.0.1:${http.address().port}/?locale=en-US`);
   await frame.getByRole('heading', { name: 'Drawings' }).waitFor();
-  await frame.getByRole('button', { name: /本地协作流程/ }).click();
+  await card('本地协作流程').click();
   await frame.getByLabel('Drawing title', { exact: true }).waitFor({ timeout: 12000 });
   assert.equal(await frame.locator('main').getAttribute('lang'), 'en');
   assert.equal(await frame.locator('.status .sr-only').innerText(), 'Saved');
@@ -279,7 +294,7 @@ try {
   await frame.getByRole('heading', { name: 'Drawings' }).waitFor();
   assert.deepEqual(errors, [], 'No uncaught browser errors');
   assert.deepEqual(external, [], 'No external network requests');
-  console.log('PASS: sandboxed official MCP App bridge, real Excalidraw pointer edit, autosave, Mermaid menu removal and Mermaid/plain-text paste, agent patch, reopen, 375px overflow, library thumbnails/search/copy, English locale and language toggle, fixed-ID conversation card opening straight in the editor without writing, card autosave, live agent updates, no external requests');
+  console.log('PASS: sandboxed official MCP App bridge, real Excalidraw pointer edit, autosave, Mermaid menu removal and Mermaid/plain-text paste, agent patch, reopen, 375px overflow, library thumbnails/search/copy/delete, English locale and language toggle, fixed-ID conversation card opening straight in the editor without writing, card autosave, live agent updates, no external requests');
 } finally {
   await browser?.close(); await client.close(); if (http) await new Promise(resolve => http.close(resolve));
   await rm(dir, { recursive: true, force: true });

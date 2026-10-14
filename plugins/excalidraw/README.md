@@ -110,12 +110,15 @@ npm run test:stdio
 
 ## 使用
 
-- `open_library`：独立图纸库资源，面向 Sidebar，支持缩略图、搜索、新建、复制与进入详情。宿主不支持 Sidebar 时，显式调用此工具可能把图纸库放在对话中；插件不能强制宿主布局。
+- `open_library`：独立图纸库资源，面向 Sidebar，支持缩略图、搜索、新建、复制、删除与进入详情。宿主不支持 Sidebar 时，显式调用此工具可能把图纸库放在对话中；插件不能强制宿主布局。
 - `create_drawing`：创建一张图，在对话中以固定 ID 的编辑器卡片打开。
 - `open_drawing`：在对话内直接以编辑器打开指定图纸（不区分预览态和编辑态），修改自动保存到同一张图。卡片中没有图纸列表或切换图纸入口。
 - `list_drawings` / `read_drawing`：只读取，不打开 UI。
 - `patch_drawing`：按稳定元素 ID 增量 upsert/remove，保留未修改元素与图片。
 - `save_drawing`：保存完整场景，必须携带最新 `expectedRevision`。
+- `delete_drawing`：携带最新 `expectedRevision` 删除一张图纸，文件移到 `trash/`，不再出现在列表中。
+
+删除图纸：在图纸库里把鼠标移到卡片上（触屏设备常显），点右上角垃圾桶图标，再在卡片内确认「删除」；也可以让 Agent 删除。确认采用卡片内联提示，因为宿主沙箱 iframe 可能禁止 `window.confirm`。删除不是彻底销毁：图纸文件移到 `~/.excalidraw-plugin/trash/<uuid>.excalidraw`，最近五个旧版本仍在 `backups/<uuid>/`；把文件移回 `drawings/` 即可恢复，暂无恢复 UI，也不自动清空 trash。已在其他卡片中打开的同一张图，删除后再保存会报“Drawing not found”，不会重新创建。
 
 图纸身份是永久 UUID，不是会话 ID 或 MCP 连接 ID。卡片绑定首次收到的图纸 ID，忽略其他图纸结果与旧修订；同 ID 默认展示最新内容。未建立宿主会话数据库，Agent 通过上下文显式传递 ID。图纸库编辑器左上角菜单（☰）里的「复制为新图」生成独立 UUID，原图与旧卡片不改变。
 
@@ -134,7 +137,8 @@ npm run test:stdio
 ```text
 ~/.excalidraw-plugin/
 ├── drawings/<uuid>.excalidraw
-└── backups/<uuid>/<revision>.excalidraw
+├── backups/<uuid>/<revision>.excalidraw
+└── trash/<uuid>.excalidraw
 ```
 
 - 标准 Excalidraw 场景字段，额外 `plugin` 字段保存 ID、名称、修订号和时间。
@@ -173,9 +177,9 @@ npm run test:browser
 # 可选：PLAYWRIGHT_CHROMIUM_EXECUTABLE=/path/to/chromium npm run test:browser
 ```
 
-- 单元测试：15 项，包含 Mermaid 粘贴文本保留、开发/生产 SDK 菜单移除与上游变更保护，以及 9 项存储测试，覆盖文件持久化、列表元数据缓存、图片、旧修订拒绝、多个 store 实例并发写入、备份保留、路径/符号链接/体积防护、坏文件隔离和场景校验。
-- stdio：真实启动子进程，验证 handshake、工具、UI 资源、保存冲突、进程重启后读回及 Agent 更新保留用户坐标。
-- 浏览器：仅绑定 `127.0.0.1` 随机端口的测试宿主，官方 AppBridge + sandbox iframe + 禁止远程网络的 CSP；鼠标绘图、落盘、Mermaid 入口移除、Mermaid/普通文本粘贴保存、Agent 修改、重新打开、375px 溢出检查；新增固定 ID/无串图、预览只读、返回前保存、缩略图/搜索/独立副本、同 ID 更新、冲突后保留草稿/导出及长标题检查。结束后关闭服务、清理临时图纸。
+- 单元测试：19 项，包含 Mermaid 粘贴文本保留、开发/生产 SDK 菜单移除与上游变更保护，以及 13 项存储测试，覆盖文件持久化、列表元数据缓存、图片、旧修订拒绝、多个 store 实例并发写入、备份保留、路径/符号链接/体积防护、坏文件隔离、场景校验、元素增量修改，以及删除移入 trash、保留备份并拒绝旧修订。
+- stdio：真实启动子进程，验证 handshake、工具、UI 资源、保存冲突、进程重启后读回、Agent 更新保留用户坐标及删除。
+- 浏览器：仅绑定 `127.0.0.1` 随机端口的测试宿主，官方 AppBridge + sandbox iframe + 禁止远程网络的 CSP；鼠标绘图、落盘、Mermaid 入口移除、Mermaid/普通文本粘贴保存、Agent 修改、重新打开、375px 溢出检查；新增固定 ID/无串图、预览只读、返回前保存、缩略图/搜索/独立副本/卡片内删除确认、同 ID 更新、冲突后保留草稿/导出及长标题检查。结束后关闭服务、清理临时图纸。
 - 截图写入 `.test-output/`，不提交。测试不使用 `~/.excalidraw-plugin/`。
 
 ## 侧边栏（Global 入口）

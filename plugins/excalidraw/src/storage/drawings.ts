@@ -38,6 +38,7 @@ export class DrawingStore {
     await this.directory(this.root);
     await this.directory(join(this.root, 'drawings'));
     await this.directory(join(this.root, 'backups'));
+    await this.directory(join(this.root, 'trash'));
   }
   private path(id: string) { return join(this.root, 'drawings', `${idSchema.parse(id)}.excalidraw`); }
   private async readSafe(path: string) {
@@ -127,6 +128,16 @@ export class DrawingStore {
         for (const old of versions.slice(5)) await rm(join(backupDir, old));
       } catch (error) { console.error('Backup cleanup failed:', error); }
       return next;
+    });
+  }
+  /** Move a drawing to `trash/` (restorable by moving it back); its backups stay. Fails fast on a stale revision. */
+  async delete(id: string, expectedRevision: number): Promise<Drawing['plugin']> {
+    return this.locked(async () => {
+      const current = await this.read(id);
+      if (current.plugin.revision !== expectedRevision) throw new ConflictError(current.plugin.revision);
+      await rename(this.path(id), join(this.root, 'trash', `${id}.excalidraw`));
+      this.summaries.delete(`${id}.excalidraw`);
+      return current.plugin;
     });
   }
   /** Element-level edit: untouched elements, files and app state are kept. Fails fast on a stale revision. */

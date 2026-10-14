@@ -32,7 +32,8 @@ Tool names may be prefixed by the host's server name. This portable Agent Plugin
 4. To modify existing elements, retain all their fields and only change what the user requested. Prefer `patch_drawing` with complete upsert elements and `expectedRevision` from the latest read. Untouched elements and local image files are retained.
 5. On a revision conflict, read the latest drawing again, reapply only intended edits, and retry. Never bypass revision checks or replace the entire drawing to suppress a conflict.
 6. `save_drawing` is a full-scene replacement. Include all retained elements and files. Use it only when a full save is intended. Image files must be embedded PNG/JPEG/WebP/GIF data, not remote URLs. Scenes are limited to 4 MiB serialized.
-7. Do not delete elements, overwrite an unrelated drawing, or discard a user's unsaved edits without clear authorization. Five previous saved versions are retained locally; this is not unlimited undo.
+7. Delete a whole drawing with `delete_drawing` (and the latest `expectedRevision`) only when the user explicitly asks for that drawing; it moves to the local `trash/` folder. Users can also delete from a library card.
+8. Do not delete elements, overwrite an unrelated drawing, or discard a user's unsaved edits without clear authorization. Five previous saved versions are retained locally; this is not unlimited undo.
 
 Data lives under `~/.excalidraw-plugin/` by default, not in the source repository.
 Do not claim a save succeeded until the tool returns success. Do not claim offline inference: reading a scene through an AI host can transmit it to that host/model.
