@@ -83,8 +83,10 @@ export function useDrawing({ connected, isLibrary, t, onLoaded }: Options) {
       setStatus(dirty.current ? 'unsaved' : 'saved');
       setError('');
     } catch (e) {
-      conflict.current = true; // Stop retry storms. Keep the unsaved draft available for export.
-      setStatus('paused'); setError(String(e));
+      conflict.current = true; // Stop retry storms. Keep the unsaved draft until the user picks a way out.
+      const message = String(e);
+      setStatus('paused');
+      setError(/Revision conflict/.test(message) ? tRef.current.conflict : /Drawing not found/.test(message) ? tRef.current.missing : message);
     } finally { saving.current = false; }
   }
   const saveRef = useRef(save); saveRef.current = save;
@@ -133,6 +135,21 @@ export function useDrawing({ connected, isLibrary, t, onLoaded }: Options) {
     stopSaving(message: string) { conflict.current = true; setError(message); },
     /** Retry after a pause, e.g. once the user resolves a conflict by saving manually. */
     retry() { conflict.current = false; void save(); },
+    /** Way out of a conflict: drop local edits and show the latest saved drawing. */
+    async discard() {
+      const id = current.current!.plugin.id;
+      load((await callTool<{ document: Drawing }>('read_drawing', { id })).document);
+    },
+    /** Way out of a conflict that loses nothing: keep the local edits as a new drawing. */
+    async saveAsCopy() {
+      const source = current.current!;
+      const scene = draft.current ?? sceneOf(source);
+      const name = (title.trim() || source.plugin.title).slice(0, 160 - tRef.current.copySuffix.length) + tRef.current.copySuffix;
+      dirty.current = false; // The draft is about to live on in the copy.
+      load((await callTool<{ document: Drawing }>('create_drawing', { title: name, scene })).document);
+    },
+    /** An emptied title box is not a rename: show the saved title again. */
+    restoreTitle() { if (!title.trim() && current.current) setTitle(current.current.plugin.title); },
     /** Save, then close the editor. Throws while work is still unsaved. */
     async close() {
       await save();

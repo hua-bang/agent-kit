@@ -31,7 +31,7 @@ try {
       } else if (req.url === '/tool') {
         let body = ''; for await (const chunk of req) body += chunk;
         res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify(await client.callTool(JSON.parse(body))));
-      } else { res.setHeader('Content-Type', 'text/html'); res.end('<!doctype html><iframe title="editor" style="border:0;width:100%;height:850px" sandbox="allow-scripts allow-same-origin allow-downloads allow-modals"></iframe><script type="module" src="/host.js"></script>'); }
+      } else { res.setHeader('Content-Type', 'text/html'); res.end('<!doctype html><iframe title="editor" style="border:0;width:100%;height:850px" sandbox="allow-scripts allow-same-origin"></iframe><script type="module" src="/host.js"></script>'); }
     } catch (error) { res.statusCode = 500; res.end(String(error)); }
   });
   await new Promise(resolve => http.listen(0, '127.0.0.1', resolve));
@@ -246,9 +246,12 @@ try {
   const [exported] = await page.evaluate(() => window.downloaded);
   assert.ok(exported.resource.uri.endsWith('.excalidraw'), 'Export names a .excalidraw file');
   assert.equal(JSON.parse(exported.resource.text).type, 'excalidraw');
-  page.once('dialog', dialog => dialog.accept());
-  await (await menuItem('重新载入')).click();
-  await page.waitForTimeout(500);
+  // A conflict is never a dead end, and the way out needs no window.confirm (host sandboxes may block it).
+  assert.match(await frame.locator('.resolve').innerText(), /这张图已在别处/);
+  await frame.getByRole('button', { name: '放弃我的修改，载入最新' }).click();
+  await frame.getByRole('button', { name: '确认放弃' }).click();
+  await until(async () => await frame.locator('.resolve').count() === 0);
+  assert.notEqual(await titleInput.inputValue(), '尚未保存的冲突草稿', 'Discard loads the saved title');
 
   // Use a deliberately composed fixture for visual QA, not overlapping paste-regression text.
   const elements = [];

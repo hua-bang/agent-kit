@@ -1,7 +1,7 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import type { DrawingStore } from '../../storage/drawings.js';
-import { elementSchema, idSchema, sceneSchema, titleSchema } from '../../shared/schemas.js';
+import { elementSchema, idSchema, libraryItemsSchema, sceneSchema, titleSchema } from '../../shared/schemas.js';
 import { readonly, writable } from '../constants.js';
 import { guarded } from '../result.js';
 
@@ -28,4 +28,12 @@ export function registerDrawingTools(server: McpServer, store: DrawingStore) {
     inputSchema: { id: idSchema, expectedRevision: z.number().int().positive() },
     annotations: { ...writable, destructiveHint: true },
   }, ({ id, expectedRevision }) => guarded(async () => ({ deleted: await store.delete(id, expectedRevision) })));
+  // The editor's personal library ("素材库"). Called by the App only; hidden from the model.
+  const appOnly = { ui: { visibility: ['app'] } };
+  server.registerTool('read_library', { description: 'Read the personal Excalidraw library. Called by the App, not by the model.', inputSchema: {}, annotations: readonly, _meta: appOnly },
+    () => guarded(async () => ({ libraryItems: await store.readLibrary() })));
+  server.registerTool('save_library', {
+    description: 'Replace the personal Excalidraw library. Called by the App, not by the model.',
+    inputSchema: { libraryItems: libraryItemsSchema }, annotations: { ...writable, destructiveHint: true }, _meta: appOnly,
+  }, ({ libraryItems }) => guarded(async () => ({ saved: await store.saveLibrary(libraryItems) })));
 }

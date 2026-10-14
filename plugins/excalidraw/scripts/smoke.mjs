@@ -19,7 +19,7 @@ try {
   await connect();
   assert.equal(client.getServerVersion().name, 'local-excalidraw');
   assert.equal(client.getServerVersion().title, 'Agentic Excalidraw');
-  const tools = await client.listTools(); assert.equal(tools.tools.length, 10);
+  const tools = await client.listTools(); assert.equal(tools.tools.length, 12);
   assert.equal(tools.tools.find(t => t.name === 'open_library').title, 'Agentic Excalidraw');
   assert.equal(tools.tools.find(t => t.name === 'open_panel').title, 'Agentic Excalidraw');
   assert.equal(tools.tools.find(t => t.name === 'mention_drawings').title, 'Agentic Excalidraw');
@@ -76,5 +76,8 @@ try {
   assert.equal((await call('list_drawings')).drawings.length, 1);
   assert.equal((await call('delete_drawing', { id, expectedRevision: latest.document.plugin.revision })).deleted.id, id);
   assert.equal((await call('list_drawings')).drawings.length, 0);
-  console.log('PASS: real stdio handshake, resource, @-mention search and drawing resources, create, patch, conflict, process restart, user-position preservation, delete');
+  const item = { id: 'lib-1', status: 'unpublished', created: 1, elements: [box] };
+  assert.equal((await call('save_library', { libraryItems: [item] })).saved, 1);
+  assert.deepEqual((await call('read_library')).libraryItems, [item]);
+  console.log('PASS: real stdio handshake, resource, @-mention search and drawing resources, create, patch, conflict, process restart, user-position preservation, delete, personal library');
 } finally { await client?.close(); await rm(dir, { recursive: true, force: true }); }

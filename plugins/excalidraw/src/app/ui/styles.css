@@ -106,6 +106,12 @@ html, body, #root { height: 100%; }
 .banner.error { background: var(--danger-soft); color: var(--danger); }
 .banner.notice { background: var(--primary-light); color: var(--primary-text); }
 .banner.inline { margin: 0 0 12px; }
+.banner .dismiss { width: 28px; height: 28px; color: inherit; font-size: 18px; }
+.resolve { flex-wrap: wrap; }
+.resolve-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.resolve-actions button { height: 32px; font-size: 13px; }
+/* Installing from the public library site needs a redirect back into this page, which a host sandbox cannot receive. */
+.excalidraw .library-menu-browse-button { display: none; }
 
 /* Save state: dot + label */
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }

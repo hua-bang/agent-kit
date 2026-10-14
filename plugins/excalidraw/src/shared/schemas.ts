@@ -36,6 +36,8 @@ export const sceneSchema = z.object({
     if (key !== file.id) ctx.addIssue({ code: 'custom', message: 'File ID mismatch' });
   }
 });
+/** Excalidraw's personal library ("素材库"): items are opaque to the plugin beyond their elements. */
+export const libraryItemsSchema = z.array(z.object({ id: z.string().min(1).max(200), elements: z.array(elementSchema).max(5_000) }).passthrough()).max(1_000);
 export const titleSchema = z.string().trim().min(1).max(160);
 export const documentSchema = z.object({
   type: z.literal('excalidraw'), version: z.literal(2), source: z.string(),

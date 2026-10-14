@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { callTool } from './host/bridge';
+import { callTool, openExternal } from './host/bridge';
 import { useHost } from './host/useHost';
 import { useModelContext } from './host/modelContext';
 import { useSession } from './host/session';
@@ -45,6 +45,18 @@ export function App() {
     failed(message) { drawing.setError(t.connectFailed(message)); drawing.setStatus('disconnected'); },
   });
   const { locale, t, toggle: toggleLocale } = useLocale(host.hostLocale);
+  // Excalidraw's own external links (help dialog and similar) try to open a new window, which host sandboxes block.
+  useEffect(() => {
+    const onClick = (event: MouseEvent) => {
+      const anchor = (event.target as Element | null)?.closest?.('a[href]') as HTMLAnchorElement | null;
+      // Element links (Excalidraw's link popup) go through onLinkOpen in the editor instead.
+      if (!anchor || anchor.closest('.excalidraw-hyperlinkContainer') || !/^https?:/i.test(anchor.href) || new URL(anchor.href).origin === location.origin) return;
+      event.preventDefault();
+      void openExternal(anchor.href).then(opened => { if (!opened) setNotice(t.linkUnavailable(anchor.href)); });
+    };
+    document.addEventListener('click', onClick, true);
+    return () => document.removeEventListener('click', onClick, true);
+  }, [t]);
   const drawing = useDrawing({ connected: host.connected, isLibrary, t, onLoaded: isPanel ? session.remember : undefined });
   const { doc, error } = drawing;
   const library = useLibrary(host.connected, isLibrary && !doc, message => drawing.setError(message));
@@ -52,12 +64,12 @@ export function App() {
 
   async function action(work: () => Promise<void>) {
     setBusy(true); drawing.setError('');
-    try { await work(); } catch (e) { drawing.setError(String(e)); } finally { setBusy(false); }
+    try { await work(); } catch (e) { drawing.setError(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); }
   }
   const open = async (tool: string, args: Record<string, unknown>) => drawing.load((await callTool<{ document: Drawing }>(tool, args)).document);
   const messages = <>
     {error && <div className="banner error" role="alert"><span>{error}</span>{!doc && host.connected && isLibrary && <button className="tool" onClick={() => void library.refresh()}>{t.retry}</button>}</div>}
-    {notice && <div className="banner notice" role="status">{notice}</div>}
+    {notice && <div className="banner notice" role="status"><span>{notice}</span><button type="button" className="ghost icon-button dismiss" aria-label={t.dismiss} title={t.dismiss} onClick={() => setNotice('')}>×</button></div>}
   </>;
   return <main lang={locale} className={`app ${isLibrary ? 'library-surface' : 'drawing-surface'} ${doc ? 'is-editing' : ''}`}>
     <a className="skip-link" href="#main-content">{t.skipLink}</a>

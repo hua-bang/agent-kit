@@ -3,7 +3,7 @@ import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import lockfile from 'proper-lockfile';
-import { documentSchema, emptyScene, idSchema, sceneSchema, titleSchema, type Drawing, type Scene } from '../shared/schemas.js';
+import { documentSchema, emptyScene, idSchema, libraryItemsSchema, sceneSchema, titleSchema, type Drawing, type Scene } from '../shared/schemas.js';
 
 const MAX_BYTES = 4 * 1024 * 1024;
 export class ConflictError extends Error {
@@ -128,6 +128,20 @@ export class DrawingStore {
         for (const old of versions.slice(5)) await rm(join(backupDir, old));
       } catch (error) { console.error('Backup cleanup failed:', error); }
       return next;
+    });
+  }
+  /** The personal library shared by every view, stored beside the drawings as a standard `.excalidrawlib`. */
+  async readLibrary(): Promise<unknown[]> {
+    await this.init();
+    const path = join(this.root, 'library.excalidrawlib');
+    try { return libraryItemsSchema.parse(JSON.parse(await this.readSafe(path)).libraryItems ?? []); }
+    catch (error) { if (error instanceof Error && 'code' in error && error.code === 'ENOENT') return []; throw error; }
+  }
+  async saveLibrary(items: unknown[]): Promise<number> {
+    const libraryItems = libraryItemsSchema.parse(items);
+    return this.locked(async () => {
+      await this.atomic(join(this.root, 'library.excalidrawlib'), JSON.stringify({ type: 'excalidrawlib', version: 2, source: 'agent-kit/excalidraw', libraryItems }));
+      return libraryItems.length;
     });
   }
   /** Move a drawing to `trash/` (restorable by moving it back); its backups stay. Fails fast on a stale revision. */
