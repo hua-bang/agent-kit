@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { mkdtemp, mkdir, rm } from 'node:fs/promises';
+import { readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { build } from 'vite';
@@ -239,9 +240,12 @@ try {
   await frame.getByRole('button', { name: '保存', exact: true }).click();
   await frame.getByRole('alert').waitFor();
   assert.equal(await titleInput.inputValue(), '尚未保存的冲突草稿');
-  const downloadWait = page.waitForEvent('download');
+  // Sandboxed hosts block iframe downloads, so export goes through the host's ui/download-file.
   await (await menuItem('导出')).click();
-  assert.ok((await downloadWait).suggestedFilename().endsWith('.excalidraw'));
+  await page.waitForFunction(() => window.downloaded);
+  const [exported] = await page.evaluate(() => window.downloaded);
+  assert.ok(exported.resource.uri.endsWith('.excalidraw'), 'Export names a .excalidraw file');
+  assert.equal(JSON.parse(exported.resource.text).type, 'excalidraw');
   page.once('dialog', dialog => dialog.accept());
   await (await menuItem('重新载入')).click();
   await page.waitForTimeout(500);
@@ -266,6 +270,28 @@ try {
   // Untouched by the user, the view refits when the frame narrows a lot (e.g. a sidebar tab resize).
   await page.setViewportSize({ width: 800, height: 950 });
   await until(async () => parseInt(await frame.locator('.reset-zoom-button').innerText(), 10) < fittedZoom, 3000);
+  // A diagram written the way the skill describes behaves like a hand-made one: dragging a
+  // node moves its label and re-routes the bound arrow, with no stacked loose layers.
+  const linked = JSON.parse(readFileSync('skills/excalidraw/SKILL.md', 'utf8').match(/Example of two connected nodes: `(\[.*?\])`/)[1]);
+  const linkedDoc = (await client.callTool({ name: 'create_drawing', arguments: { title: '连线节点', scene: { elements: linked } } })).structuredContent.document;
+  await page.goto(`http://127.0.0.1:${http.address().port}/?drawing=${linkedDoc.plugin.id}`);
+  await frame.locator('.excalidraw canvas.interactive').first().waitFor();
+  await until(async () => (await frame.locator('.editor').getAttribute('class')).split(' ').every(c => c !== 'is-fitting'));
+  await page.waitForTimeout(400);
+  const linkedBox = await frame.locator('.excalidraw canvas.interactive').first().boundingBox();
+  const linkedZoom = parseInt(await frame.locator('.reset-zoom-button').innerText(), 10) / 100;
+  // Fitting centres the scene (x 0..460, y 0..80): node "a" sits 150 scene px left of the centre.
+  const grab = { x: linkedBox.x + linkedBox.width / 2 - 150 * linkedZoom, y: linkedBox.y + linkedBox.height / 2 };
+  await page.mouse.click(grab.x, grab.y);
+  await page.mouse.move(grab.x, grab.y); await page.mouse.down();
+  await page.mouse.move(grab.x, grab.y + 120 * linkedZoom, { steps: 8 }); await page.mouse.up();
+  await until(async () => (await titleOf(linkedDoc.plugin.id)).revision > 1);
+  const moved = Object.fromEntries((await client.callTool({ name: 'read_drawing', arguments: { id: linkedDoc.plugin.id } })).structuredContent.document.elements.map(e => [e.id, e]));
+  assert.ok(moved.a.y > 60, `Node moved (y=${moved.a.y})`);
+  assert.ok(Math.abs(moved['a-label'].y - moved.a.y - 28) < 4, 'Bound label moved with its node');
+  assert.equal(moved.b.y, 0, 'Other node stayed');
+  assert.ok(moved['a-b'].y > 40 && moved['a-b'].startBinding?.elementId === 'a' && moved['a-b'].endBinding?.elementId === 'b', 'Arrow stays bound and follows the node');
+  await page.screenshot({ path: '.test-output/linked-drag.png' });
   const qa = (await client.callTool({ name: 'create_drawing', arguments: { title: '本地协作流程', scene: { elements } } })).structuredContent.document;
   await page.setViewportSize({ width: 1000, height: 950 });
   await page.goto(`http://127.0.0.1:${http.address().port}/?drawing=${qa.plugin.id}`);

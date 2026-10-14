@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { Excalidraw, MainMenu, restore, serializeAsJSON } from '@excalidraw/excalidraw';
 import type { McpUiTheme } from '@modelcontextprotocol/ext-apps';
-import { callTool } from '../host/bridge';
+import { bridge, callTool } from '../host/bridge';
 import type { Locale, Messages } from '../ui/i18n';
 import { IconBack, IconCopy, IconDownload, IconLanguage, IconRefresh } from '../ui/icons';
 import { sceneSchema, sceneOf, type Drawing } from '../../shared/schemas';
@@ -24,14 +24,24 @@ type Props = {
 export function Editor({ drawing, doc, isLibrary, t, locale, theme, busy, action, onBack, onNotice, toggleLocale, messages }: Props) {
   const { status, viewport, api } = drawing;
   const tone = status === 'paused' || status === 'disconnected' ? 'error' : status === 'saving' || status === 'unsaved' ? 'pending' : status === 'saved' ? 'ok' : 'idle';
-  function download() {
+  async function download() {
     const source = drawing.current;
     if (!source) return;
     const content = api.current ? serializeAsJSON(api.current.getSceneElements(), api.current.getAppState(), api.current.getFiles(), 'local') : JSON.stringify(source);
-    const blob = new Blob([content], { type: 'application/json' });
-    const url = URL.createObjectURL(blob); const anchor = document.createElement('a');
-    anchor.href = url; anchor.download = source.plugin.title.replace(/[\\/:*?"<>|]/g, '_') + '.excalidraw'; anchor.click();
+    const name = source.plugin.title.replace(/[\\/:*?"<>|]/g, '_') + '.excalidraw';
+    // Host sandboxes usually block iframe downloads silently, so ask the host to save the file when it can.
+    if (bridge.getHostCapabilities()?.downloadFile) {
+      try {
+        const { isError } = await bridge.downloadFile({ contents: [{ type: 'resource', resource: { uri: `file:///${encodeURIComponent(name)}`, mimeType: 'application/json', text: content } }] });
+        if (!isError) return; // isError also covers the user cancelling the host's own dialog.
+        onNotice(t.exportNotStarted); return;
+      } catch { /* Fall back to a direct download. */ }
+    }
+    const url = URL.createObjectURL(new Blob([content], { type: 'application/json' })); const anchor = document.createElement('a');
+    anchor.href = url; anchor.download = name; anchor.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
+    // A blocked download raises no error the page can see; say what to do if nothing happened.
+    onNotice(t.exportFallback);
   }
   return <>
     <header className="editor-bar">
@@ -58,7 +68,7 @@ export function Editor({ drawing, doc, isLibrary, t, locale, theme, busy, action
         catch (e) { drawing.stopSaving(t.cannotAutosave(String(e))); }
       }}>
       <MainMenu>
-        <MainMenu.Item icon={<IconDownload />} onSelect={download}>{t.export}</MainMenu.Item>
+        <MainMenu.Item icon={<IconDownload />} onSelect={() => void download()}>{t.export}</MainMenu.Item>
         {isLibrary && <MainMenu.Item icon={<IconCopy />} disabled={busy} onSelect={() => action(async () => {
           await drawing.save();
           if (drawing.unsaved || drawing.busySaving) throw new Error(t.saveBeforeCopy);

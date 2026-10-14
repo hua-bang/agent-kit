@@ -46,7 +46,8 @@ export function useDrawing({ connected, isLibrary, t, onLoaded }: Options) {
     setDoc(next); setTitle(next.plugin.title); setError(''); setStatus('saved');
     onLoaded?.(next.plugin.id);
     if (editor) {
-      const scene = restore(sceneOf(next) as unknown as Parameters<typeof restore>[0], null, null);
+      // Same binding repair as Excalidraw's own mount: agent JSON may bind an arrow or label from one side only.
+      const scene = restore(sceneOf(next) as unknown as Parameters<typeof restore>[0], null, null, { repairBindings: true });
       editor.addFiles(Object.values(scene.files));
       // Not undoable: Ctrl+Z must not silently revert someone else's saved change.
       editor.updateScene({ elements: scene.elements, appState: { viewBackgroundColor: scene.appState.viewBackgroundColor }, captureUpdate: CaptureUpdateAction.NEVER });
