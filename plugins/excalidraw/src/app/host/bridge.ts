@@ -8,3 +8,8 @@ export async function callTool<T>(name: string, args: Record<string, unknown> = 
   if (!result.structuredContent) throw new Error(t.noStructuredData);
   return result.structuredContent as T;
 }
+/** Open an http(s) URL through the host; sandboxed views cannot open windows. False when the host cannot. */
+export async function openExternal(url: string): Promise<boolean> {
+  if (!bridge.getHostCapabilities()?.openLinks) return false;
+  try { return !(await bridge.openLink({ url })).isError; } catch { return false; }
+}

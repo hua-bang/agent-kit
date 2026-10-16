@@ -12,3 +12,4 @@ export const IconDownload = svg(<><path d="M12 4v11M7 10l5 5 5-5" /><path d="M5 
 export const IconCopy = svg(<><rect x="8" y="8" width="12" height="12" rx="2" /><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" /></>);
 export const IconLanguage = svg(<><circle cx="12" cy="12" r="9" /><path d="M3 12h18M12 3c2.5 2.5 3.5 5.5 3.5 9s-1 6.5-3.5 9c-2.5-2.5-3.5-5.5-3.5-9s1-6.5 3.5-9z" /></>);
 export const IconCanvas = svg(<><rect x="3" y="4" width="18" height="16" rx="3" /><path d="M7 15c2-4 4-4 5-1s3 3 5-2" /></>);
+export const IconTrash = svg(<><path d="M4 7h16M10 11v6M14 11v6" /><path d="M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3" /></>);

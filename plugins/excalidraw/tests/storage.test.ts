@@ -76,6 +76,28 @@ describe('local drawing storage', () => {
     expect(() => sceneSchema.parse({ ...emptyScene, elements: [{ ...box, type: 'iframe' }] })).toThrow();
   });
 });
+describe('delete', () => {
+  it('moves the drawing to trash, keeps backups and rejects stale revisions', async () => {
+    const doc = await store.create('old', { ...emptyScene, elements: [box] });
+    const saved = await store.save(doc.plugin.id, 1, emptyScene);
+    await expect(store.delete(doc.plugin.id, 1)).rejects.toBeInstanceOf(ConflictError);
+    expect((await store.delete(doc.plugin.id, saved.plugin.revision)).title).toBe('old');
+    expect((await store.list()).drawings).toEqual([]);
+    await expect(store.read(doc.plugin.id)).rejects.toThrow();
+    expect(await readdir(join(root, 'trash'))).toEqual([`${doc.plugin.id}.excalidraw`]);
+    expect(await readdir(join(root, 'backups', doc.plugin.id))).toEqual(['1.excalidraw']);
+  });
+});
+describe('personal library', () => {
+  it('starts empty, round-trips items and rejects invalid ones', async () => {
+    expect(await store.readLibrary()).toEqual([]);
+    const item = { id: 'item', status: 'unpublished', created: 1, elements: [box] };
+    expect(await store.saveLibrary([item])).toBe(1);
+    expect(await new DrawingStore(root).readLibrary()).toEqual([item]);
+    await expect(store.saveLibrary([{ id: 'bad', elements: [{ id: 'x' }] }])).rejects.toThrow();
+    expect(await store.readLibrary()).toEqual([item]);
+  });
+});
 describe('patchElements', () => {
   const a = { ...box, id: 'a' }, b = { ...box, id: 'b' }, c = { ...box, id: 'c' };
   it('replaces in place, appends new elements and removes IDs', () => {

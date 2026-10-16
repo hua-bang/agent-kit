@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { mkdtemp, mkdir, rm } from 'node:fs/promises';
+import { readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { build } from 'vite';
@@ -30,7 +31,7 @@ try {
       } else if (req.url === '/tool') {
         let body = ''; for await (const chunk of req) body += chunk;
         res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify(await client.callTool(JSON.parse(body))));
-      } else { res.setHeader('Content-Type', 'text/html'); res.end('<!doctype html><iframe title="editor" style="border:0;width:100%;height:850px" sandbox="allow-scripts allow-same-origin allow-downloads allow-modals"></iframe><script type="module" src="/host.js"></script>'); }
+      } else { res.setHeader('Content-Type', 'text/html'); res.end('<!doctype html><iframe title="editor" style="border:0;width:100%;height:850px" sandbox="allow-scripts allow-same-origin"></iframe><script type="module" src="/host.js"></script>'); }
     } catch (error) { res.statusCode = 500; res.end(String(error)); }
   });
   await new Promise(resolve => http.listen(0, '127.0.0.1', resolve));
@@ -41,6 +42,8 @@ try {
   page.on('request', req => { if (/^https?:/.test(req.url()) && !req.url().startsWith('http://127.0.0.1:')) external.push(req.url()); });
   await page.goto(`http://127.0.0.1:${http.address().port}`);
   const frame = page.frameLocator('iframe');
+  // A library card's open button (each card also has a delete button labelled with its title).
+  const card = title => frame.locator('button.drawing', { hasText: title });
   // Drawing actions live in Excalidraw's main menu, not the header.
   const until = async (check, timeout = 9000) => {
     for (const end = Date.now() + timeout; !(await check());) {
@@ -105,8 +108,8 @@ try {
   const overflow = await page.frames()[1].evaluate(() => document.documentElement.scrollWidth > innerWidth);
   assert.equal(overflow, false, 'No horizontal document overflow at 375px');
   await frame.getByRole('button', { name: '图纸列表', exact: true }).click();
-  await frame.getByRole('button', { name: /浏览器实际编辑验证/ }).waitFor();
-  await frame.getByRole('button', { name: /浏览器实际编辑验证/ }).click();
+  await card('浏览器实际编辑验证').waitFor();
+  await card('浏览器实际编辑验证').click();
   await frame.getByLabel('图纸名称', { exact: true }).waitFor({ timeout: 12000 }).catch(async e => { console.error(await frame.locator('body').innerText()); throw e; });
   // Library copy creates independent identity and keeps the original untouched.
   assert.equal(await frame.getByRole('button', { name: '保存', exact: true }).count(), 0, 'Save button hidden while autosaved');
@@ -117,7 +120,7 @@ try {
   const copy = copies.find(d => d.id !== id);
   await frame.getByLabel('图纸名称', { exact: true }).fill('独立副本');
   await frame.getByRole('button', { name: '图纸列表', exact: true }).click();
-  await frame.getByRole('button', { name: /独立副本/ }).waitFor();
+  await card('独立副本').waitFor();
   assert.equal(await frame.getByText('已打开独立副本，原图保持不变。').count(), 0, 'Copy notice does not linger on the list');
   // Only the conversation panel groups drawings by conversation; the Sidebar library stays one list.
   assert.equal(await frame.locator('.group-title').count(), 0, 'Sidebar library has no conversation group');
@@ -142,7 +145,20 @@ try {
   await frame.locator('.drawing img').first().waitFor();
   // A drawing created from chat appears in the open list without pressing refresh.
   await client.callTool({ name: 'create_drawing', arguments: { title: 'Agent 新建的图', scene: { elements: [{ id: 'agent-box', type: 'rectangle', x: 0, y: 0, width: 160, height: 90 }] } } });
-  await frame.getByRole('button', { name: /Agent 新建的图/ }).waitFor({ timeout: 9000 });
+  await card('Agent 新建的图').waitFor({ timeout: 9000 });
+  // Delete from the card asks inline first; cancel keeps it, confirm moves it out of the list.
+  await card('Agent 新建的图').hover();
+  await frame.getByRole('button', { name: '删除「Agent 新建的图」' }).click();
+  await page.screenshot({ path: '.test-output/library-delete-confirm.png' });
+  await frame.getByRole('button', { name: '取消', exact: true }).click();
+  assert.equal(await card('Agent 新建的图').count(), 1, 'Cancel keeps the drawing');
+  await frame.getByRole('button', { name: '删除「Agent 新建的图」' }).click();
+  await frame.getByRole('group', { name: '删除「Agent 新建的图」' }).getByRole('button', { name: '删除', exact: true }).click();
+  await frame.getByText('已删除「Agent 新建的图」').waitFor();
+  assert.equal(await card('Agent 新建的图').count(), 0, 'Deleted drawing leaves the list');
+  assert.equal((await client.callTool({ name: 'list_drawings', arguments: {} })).structuredContent.drawings.length, 2);
+  await client.callTool({ name: 'create_drawing', arguments: { title: 'Agent 新建的图', scene: { elements: [{ id: 'agent-box', type: 'rectangle', x: 0, y: 0, width: 160, height: 90 }] } } });
+  await card('Agent 新建的图').waitFor({ timeout: 9000 });
   await page.screenshot({ path: '.test-output/library-mobile.png' });
   await page.setViewportSize({ width: 1200, height: 950 });
   await page.screenshot({ path: '.test-output/library-desktop.png' });
@@ -224,12 +240,18 @@ try {
   await frame.getByRole('button', { name: '保存', exact: true }).click();
   await frame.getByRole('alert').waitFor();
   assert.equal(await titleInput.inputValue(), '尚未保存的冲突草稿');
-  const downloadWait = page.waitForEvent('download');
+  // Sandboxed hosts block iframe downloads, so export goes through the host's ui/download-file.
   await (await menuItem('导出')).click();
-  assert.ok((await downloadWait).suggestedFilename().endsWith('.excalidraw'));
-  page.once('dialog', dialog => dialog.accept());
-  await (await menuItem('重新载入')).click();
-  await page.waitForTimeout(500);
+  await page.waitForFunction(() => window.downloaded);
+  const [exported] = await page.evaluate(() => window.downloaded);
+  assert.ok(exported.resource.uri.endsWith('.excalidraw'), 'Export names a .excalidraw file');
+  assert.equal(JSON.parse(exported.resource.text).type, 'excalidraw');
+  // A conflict is never a dead end, and the way out needs no window.confirm (host sandboxes may block it).
+  assert.match(await frame.locator('.resolve').innerText(), /这张图已在别处/);
+  await frame.getByRole('button', { name: '放弃我的修改，载入最新' }).click();
+  await frame.getByRole('button', { name: '确认放弃' }).click();
+  await until(async () => await frame.locator('.resolve').count() === 0);
+  assert.notEqual(await titleInput.inputValue(), '尚未保存的冲突草稿', 'Discard loads the saved title');
 
   // Use a deliberately composed fixture for visual QA, not overlapping paste-regression text.
   const elements = [];
@@ -251,6 +273,28 @@ try {
   // Untouched by the user, the view refits when the frame narrows a lot (e.g. a sidebar tab resize).
   await page.setViewportSize({ width: 800, height: 950 });
   await until(async () => parseInt(await frame.locator('.reset-zoom-button').innerText(), 10) < fittedZoom, 3000);
+  // A diagram written the way the skill describes behaves like a hand-made one: dragging a
+  // node moves its label and re-routes the bound arrow, with no stacked loose layers.
+  const linked = JSON.parse(readFileSync('skills/excalidraw/SKILL.md', 'utf8').match(/Example of two connected nodes: `(\[.*?\])`/)[1]);
+  const linkedDoc = (await client.callTool({ name: 'create_drawing', arguments: { title: '连线节点', scene: { elements: linked } } })).structuredContent.document;
+  await page.goto(`http://127.0.0.1:${http.address().port}/?drawing=${linkedDoc.plugin.id}`);
+  await frame.locator('.excalidraw canvas.interactive').first().waitFor();
+  await until(async () => (await frame.locator('.editor').getAttribute('class')).split(' ').every(c => c !== 'is-fitting'));
+  await page.waitForTimeout(400);
+  const linkedBox = await frame.locator('.excalidraw canvas.interactive').first().boundingBox();
+  const linkedZoom = parseInt(await frame.locator('.reset-zoom-button').innerText(), 10) / 100;
+  // Fitting centres the scene (x 0..460, y 0..80): node "a" sits 150 scene px left of the centre.
+  const grab = { x: linkedBox.x + linkedBox.width / 2 - 150 * linkedZoom, y: linkedBox.y + linkedBox.height / 2 };
+  await page.mouse.click(grab.x, grab.y);
+  await page.mouse.move(grab.x, grab.y); await page.mouse.down();
+  await page.mouse.move(grab.x, grab.y + 120 * linkedZoom, { steps: 8 }); await page.mouse.up();
+  await until(async () => (await titleOf(linkedDoc.plugin.id)).revision > 1);
+  const moved = Object.fromEntries((await client.callTool({ name: 'read_drawing', arguments: { id: linkedDoc.plugin.id } })).structuredContent.document.elements.map(e => [e.id, e]));
+  assert.ok(moved.a.y > 60, `Node moved (y=${moved.a.y})`);
+  assert.ok(Math.abs(moved['a-label'].y - moved.a.y - 28) < 4, 'Bound label moved with its node');
+  assert.equal(moved.b.y, 0, 'Other node stayed');
+  assert.ok(moved['a-b'].y > 40 && moved['a-b'].startBinding?.elementId === 'a' && moved['a-b'].endBinding?.elementId === 'b', 'Arrow stays bound and follows the node');
+  await page.screenshot({ path: '.test-output/linked-drag.png' });
   const qa = (await client.callTool({ name: 'create_drawing', arguments: { title: '本地协作流程', scene: { elements } } })).structuredContent.document;
   await page.setViewportSize({ width: 1000, height: 950 });
   await page.goto(`http://127.0.0.1:${http.address().port}/?drawing=${qa.plugin.id}`);
@@ -266,7 +310,7 @@ try {
   // English host locale: UI text and Excalidraw's own language follow it.
   await page.goto(`http://127.0.0.1:${http.address().port}/?locale=en-US`);
   await frame.getByRole('heading', { name: 'Drawings' }).waitFor();
-  await frame.getByRole('button', { name: /本地协作流程/ }).click();
+  await card('本地协作流程').click();
   await frame.getByLabel('Drawing title', { exact: true }).waitFor({ timeout: 12000 });
   assert.equal(await frame.locator('main').getAttribute('lang'), 'en');
   assert.equal(await frame.locator('.status .sr-only').innerText(), 'Saved');
@@ -279,7 +323,7 @@ try {
   await frame.getByRole('heading', { name: 'Drawings' }).waitFor();
   assert.deepEqual(errors, [], 'No uncaught browser errors');
   assert.deepEqual(external, [], 'No external network requests');
-  console.log('PASS: sandboxed official MCP App bridge, real Excalidraw pointer edit, autosave, Mermaid menu removal and Mermaid/plain-text paste, agent patch, reopen, 375px overflow, library thumbnails/search/copy, English locale and language toggle, fixed-ID conversation card opening straight in the editor without writing, card autosave, live agent updates, no external requests');
+  console.log('PASS: sandboxed official MCP App bridge, real Excalidraw pointer edit, autosave, Mermaid menu removal and Mermaid/plain-text paste, agent patch, reopen, 375px overflow, library thumbnails/search/copy/delete, English locale and language toggle, fixed-ID conversation card opening straight in the editor without writing, card autosave, live agent updates, no external requests');
 } finally {
   await browser?.close(); await client.close(); if (http) await new Promise(resolve => http.close(resolve));
   await rm(dir, { recursive: true, force: true });

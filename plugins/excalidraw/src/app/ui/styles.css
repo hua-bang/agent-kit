@@ -106,6 +106,12 @@ html, body, #root { height: 100%; }
 .banner.error { background: var(--danger-soft); color: var(--danger); }
 .banner.notice { background: var(--primary-light); color: var(--primary-text); }
 .banner.inline { margin: 0 0 12px; }
+.banner .dismiss { width: 28px; height: 28px; color: inherit; font-size: 18px; }
+.resolve { flex-wrap: wrap; }
+.resolve-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.resolve-actions button { height: 32px; font-size: 13px; }
+/* Installing from the public library site needs a redirect back into this page, which a host sandbox cannot receive. */
+.excalidraw .library-menu-browse-button { display: none; }
 
 /* Save state: dot + label */
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
@@ -169,6 +175,21 @@ html, body, #root { height: 100%; }
 .drawing > .scene-preview { aspect-ratio: 16 / 10; height: auto; background: var(--canvas); }
 .drawing .scene-preview img { padding: 14px; }
 .drawing .preview-placeholder { font-size: 11px; padding: 6px; }
+.drawing-card { position: relative; display: flex; min-width: 0; }
+.drawing-card > .drawing { flex: 1; min-width: 0; }
+.card-delete { position: absolute; top: 8px; right: 8px; width: 32px; height: 32px; color: var(--muted); box-shadow: var(--shadow-island); }
+@media (hover: hover) {
+  .card-delete { opacity: 0; transition: opacity .15s; }
+  .drawing-card:hover .card-delete, .card-delete:focus-visible { opacity: 1; }
+  .card-delete:not(:disabled):hover { color: var(--danger); }
+}
+.delete-confirm {
+  position: absolute; top: 8px; left: 8px; right: 8px; display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
+  padding: 8px; border-radius: var(--radius); background: var(--island); box-shadow: var(--shadow-island); font-size: 13px;
+}
+.delete-confirm > span { flex: 1 1 100%; }
+.delete-confirm button { flex: 1; height: 32px; }
+.danger { background: var(--danger); color: var(--on-primary); font-weight: 600; }
 .drawing-info { display: flex; flex-direction: column; gap: 2px; padding: 10px 12px 12px; min-width: 0; }
 .drawing strong { font-size: 14px; font-weight: 500; line-height: 1.4; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .more { display: flex; margin: 20px auto 0; }
