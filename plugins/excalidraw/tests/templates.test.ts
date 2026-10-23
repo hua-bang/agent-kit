@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { sceneSchema } from '../src/shared/schemas';
-import { TEMPLATE_IDS, templateName, templateScene } from '../src/shared/templates';
+import { TEMPLATE_IDS, relocateScene, templateName, templateScene, withPlaceholders } from '../src/shared/templates';
 
 type Ref = { id: string; type: string };
 type Binding = { elementId: string } | null;
@@ -50,5 +50,28 @@ describe('starter templates', () => {
 
   it('is deterministic', () => {
     expect(JSON.stringify(templateScene('architecture'))).toBe(JSON.stringify(templateScene('architecture')));
+  });
+
+  it('relocates a saved scene with fresh IDs and references', () => {
+    const scene = templateScene('architecture');
+    const placed = relocateScene(scene, { idPrefix: 'p-', x: 1000, y: 200 });
+    expect(Math.min(...placed.elements.map(e => e.x))).toBeCloseTo(1000);
+    expect(Math.min(...placed.elements.map(e => e.y))).toBeCloseTo(200);
+    const byId = new Map(placed.elements.map(e => [e.id, e as Record<string, unknown>]));
+    for (const e of byId.values()) {
+      expect(String(e.id).startsWith('p-')).toBe(true);
+      if (e.containerId) expect(byId.has(e.containerId as string)).toBe(true);
+      for (const b of [e.startBinding, e.endBinding] as ({ elementId: string } | null)[]) if (b) expect(byId.has(b.elementId)).toBe(true);
+      for (const ref of (e.boundElements as { id: string }[] | null) ?? []) expect(byId.has(ref.id)).toBe(true);
+    }
+  });
+
+  it('replaces text with placeholders but keeps structure', () => {
+    const scene = templateScene('flowchart', { locale: 'zh-CN' });
+    const generic = withPlaceholders(scene, 'zh-CN');
+    expect(generic.elements.length).toBe(scene.elements.length);
+    const texts = generic.elements.filter(e => e.type === 'text').map(e => (e as Record<string, unknown>).text);
+    expect(texts[0]).toBe('[文字 1]');
+    expect(texts.every(text => /^\[文字 \d+\]$/.test(String(text)))).toBe(true);
   });
 });

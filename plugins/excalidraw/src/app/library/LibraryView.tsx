@@ -1,9 +1,9 @@
 import { useState, type ReactNode } from 'react';
 import type { McpUiTheme } from '@modelcontextprotocol/ext-apps';
 import type { Locale, Messages } from '../ui/i18n';
-import { IconCanvas, IconLanguage, IconPlus, IconRefresh, IconSearch, IconTrash, templateIcons } from '../ui/icons';
+import { IconCanvas, IconChat, IconLanguage, IconPlus, IconRefresh, IconSearch, IconTemplate, IconTrash, templateIcons } from '../ui/icons';
 import { TEMPLATE_IDS, templateName, type TemplateId } from '../../shared/templates';
-import type { DrawingSummary } from '../../shared/schemas';
+import type { DrawingSummary, TemplateSummary } from '../../shared/schemas';
 import { Preview } from './Preview';
 import type { Library } from './useLibrary';
 
@@ -15,8 +15,15 @@ type Props = {
   t: Messages; locale: Locale; theme: McpUiTheme;
   connected: boolean; busy: boolean; refreshing: boolean; failed: boolean;
   onOpen(id: string): void;
-  /** Create and open a drawing, blank or from a starter template; `created` runs only on success. */
-  onCreate(title: string, created: () => void, template?: TemplateId): void;
+  /** The user's own templates. */
+  templates: TemplateSummary[];
+  /** The host accepts chat messages from the view, so the AI can be asked to draw a template. */
+  canAsk: boolean;
+  /** Create and open a drawing, blank or from a preset or one of the user's templates; `created` runs only on success. */
+  onCreate(title: string, created: () => void, template?: TemplateId | string): void;
+  onDeleteTemplate(template: TemplateSummary): void;
+  /** Ask the AI in the chat to draw a template from a description; `sent` runs only on success. */
+  onGenerate(description: string, sent: () => void): void;
   /** Delete a drawing after the user confirmed on its card. */
   onDelete(drawing: DrawingSummary): void;
   onRefresh(): void;
@@ -24,7 +31,12 @@ type Props = {
   messages: ReactNode;
 };
 
-export function LibraryView({ library, session, query, setQuery, t, locale, theme, connected, busy, refreshing, failed, onOpen, onCreate, onDelete, onRefresh, toggleLocale, messages }: Props) {
+export function LibraryView({ library, session, query, setQuery, t, locale, theme, connected, busy, refreshing, failed, templates, canAsk, onOpen, onCreate, onDeleteTemplate, onGenerate, onDelete, onRefresh, toggleLocale, messages }: Props) {
+  const [templateTab, setTemplateTab] = useState<'presets' | 'mine'>('presets');
+  const [describing, setDescribing] = useState(false);
+  const [description, setDescription] = useState('');
+  const [confirmingTemplate, setConfirmingTemplate] = useState<string | null>(null);
+  const generate = () => { if (description.trim()) onGenerate(description.trim(), () => { setDescription(''); setDescribing(false); }); };
   const [limit, setLimit] = useState(20);
   const [newTitle, setNewTitle] = useState('');
   // The card awaiting delete confirmation. Inline, because sandboxed host frames may block window.confirm.
@@ -66,9 +78,32 @@ export function LibraryView({ library, session, query, setQuery, t, locale, them
       </div>
       <div className="templates" role="group" aria-label={t.fromTemplate}>
         <span className="meta">{t.fromTemplate}</span>
-        {TEMPLATE_IDS.map(id => { const Icon = templateIcons[id]; return <button key={id} type="button" className="tool" disabled={!connected || busy}
-          onClick={() => onCreate(newTitle.trim() || templateName(id, locale), () => setNewTitle(''), id)}><Icon />{templateName(id, locale)}</button>; })}
+        <span className="template-tabs" role="tablist" aria-label={t.fromTemplate}>
+          <button type="button" role="tab" aria-selected={templateTab === 'presets'} className={templateTab === 'presets' ? 'is-active' : ''} onClick={() => setTemplateTab('presets')}>{t.presets}</button>
+          <button type="button" role="tab" aria-selected={templateTab === 'mine'} className={templateTab === 'mine' ? 'is-active' : ''} onClick={() => setTemplateTab('mine')}>{t.myTemplates} {templates.length}</button>
+        </span>
+        {templateTab === 'presets'
+          ? TEMPLATE_IDS.map(id => { const Icon = templateIcons[id]; return <button key={id} type="button" className="tool" disabled={!connected || busy}
+            onClick={() => onCreate(newTitle.trim() || templateName(id, locale), () => setNewTitle(''), id)}><Icon />{templateName(id, locale)}</button>; })
+          : templates.length ? templates.map(template => confirmingTemplate === template.id
+            ? <span key={template.id} className="template-confirm" role="group" aria-label={t.deleteTemplateLabel(template.name)} onKeyDown={e => { if (e.key === 'Escape') setConfirmingTemplate(null); }}>
+              <span>{t.deleteTemplatePrompt}</span>
+              <button type="button" className="tool" autoFocus onClick={() => setConfirmingTemplate(null)}>{t.cancel}</button>
+              <button type="button" className="danger" disabled={!connected || busy} onClick={() => { setConfirmingTemplate(null); onDeleteTemplate(template); }}>{t.delete}</button>
+            </span>
+            : <span key={template.id} className="template-chip">
+              <button type="button" className="tool" disabled={!connected || busy} title={template.description || template.name}
+                onClick={() => onCreate(newTitle.trim() || template.name, () => setNewTitle(''), template.id)}><IconTemplate />{template.name}</button>
+              <button type="button" className="tool icon-button" aria-label={t.deleteTemplateLabel(template.name)} title={t.delete} disabled={!connected || busy} onClick={() => setConfirmingTemplate(template.id)}><IconTrash /></button>
+            </span>)
+          : <span className="meta">{t.myTemplatesEmpty}</span>}
+        {canAsk && <button type="button" className={`tool generate ${describing ? 'is-open' : ''}`} aria-expanded={describing} onClick={() => setDescribing(open => !open)}><IconChat />{t.generateTemplate}</button>}
       </div>
+      {describing && <div className="generate-row">
+        <input autoFocus aria-label={t.generateTemplate} placeholder={t.generatePlaceholder} value={description} maxLength={500}
+          onChange={e => setDescription(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) generate(); if (e.key === 'Escape') setDescribing(false); }} />
+        <button type="button" className="primary" disabled={!connected || busy || !description.trim()} onClick={generate}>{t.generateSend}</button>
+      </div>}
       {!library ? <p className="empty-state" role="status">{failed ? t.libraryLoadFailed : connected ? t.libraryLoading : t.waitingHost}</p> : <>
         {library.warnings.length > 0 && <p className="banner error inline" role="alert">{t.unreadable(library.warnings.length)}</p>}
         {pinned.length > 0 && <>

@@ -46,6 +46,13 @@ export const documentSchema = z.object({
   files: sceneSchema.shape.files,
   plugin: z.object({ id: idSchema, title: titleSchema, revision: z.number().int().positive(), createdAt: z.string(), updatedAt: z.string() }),
 });
+/** A user's own template: a reusable scene with a name and when to use it, kept beside the drawings. */
+export const customTemplateSchema = z.object({
+  id: idSchema, name: titleSchema, description: z.string().trim().max(500).default(''),
+  scene: sceneSchema, createdAt: z.string(),
+});
+export type CustomTemplate = z.infer<typeof customTemplateSchema>;
+export type TemplateSummary = Omit<CustomTemplate, 'scene'> & { elementCount: number };
 export type Scene = z.infer<typeof sceneSchema>;
 export type Drawing = z.infer<typeof documentSchema>;
 export type DrawingSummary = Drawing['plugin'];

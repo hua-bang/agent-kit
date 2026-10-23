@@ -3,7 +3,7 @@ import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import lockfile from 'proper-lockfile';
-import { documentSchema, emptyScene, idSchema, libraryItemsSchema, sceneSchema, titleSchema, type Drawing, type Scene } from '../shared/schemas.js';
+import { customTemplateSchema, documentSchema, emptyScene, idSchema, libraryItemsSchema, sceneSchema, titleSchema, type CustomTemplate, type Drawing, type Scene, type TemplateSummary } from '../shared/schemas.js';
 
 const MAX_BYTES = 4 * 1024 * 1024;
 export class ConflictError extends Error {
@@ -39,6 +39,7 @@ export class DrawingStore {
     await this.directory(join(this.root, 'drawings'));
     await this.directory(join(this.root, 'backups'));
     await this.directory(join(this.root, 'trash'));
+    await this.directory(join(this.root, 'templates'));
   }
   private path(id: string) { return join(this.root, 'drawings', `${idSchema.parse(id)}.excalidraw`); }
   private async readSafe(path: string) {
@@ -128,6 +129,38 @@ export class DrawingStore {
         for (const old of versions.slice(5)) await rm(join(backupDir, old));
       } catch (error) { console.error('Backup cleanup failed:', error); }
       return next;
+    });
+  }
+  private templatePath(id: string) { return join(this.root, 'templates', `${idSchema.parse(id)}.json`); }
+  /** The user's own templates, newest first. Unreadable files are skipped and reported, like drawings. */
+  async listTemplates(): Promise<{ templates: TemplateSummary[]; warnings: string[] }> {
+    await this.init();
+    const templates: TemplateSummary[] = [];
+    const warnings: string[] = [];
+    for (const entry of (await readdir(join(this.root, 'templates'))).filter(name => name.endsWith('.json'))) {
+      try {
+        const { scene, ...summary } = await this.readTemplate(entry.slice(0, -5));
+        templates.push({ ...summary, elementCount: scene.elements.filter(e => !e.isDeleted).length });
+      } catch { warnings.push(`Cannot read template ${entry}`); }
+    }
+    return { templates: templates.sort((a, b) => b.createdAt.localeCompare(a.createdAt) || a.id.localeCompare(b.id)), warnings: warnings.sort() };
+  }
+  async readTemplate(id: string): Promise<CustomTemplate> {
+    const template = customTemplateSchema.parse(JSON.parse(await this.readSafe(this.templatePath(id))));
+    if (template.id !== id) throw new Error('Template ID mismatch');
+    return template;
+  }
+  async createTemplate(name: string, description: string, scene: Scene): Promise<CustomTemplate> {
+    const template = customTemplateSchema.parse({ id: randomUUID(), name, description, scene, createdAt: new Date().toISOString() });
+    if (!template.scene.elements.some(e => !e.isDeleted)) throw new Error('A template needs at least one element');
+    return this.locked(async () => { await this.atomic(this.templatePath(template.id), JSON.stringify(template)); return template; });
+  }
+  /** Move a template to `trash/` (restorable by moving it back to `templates/`). */
+  async deleteTemplate(id: string): Promise<TemplateSummary> {
+    return this.locked(async () => {
+      const { scene, ...summary } = await this.readTemplate(id);
+      await rename(this.templatePath(id), join(this.root, 'trash', `template-${id}.json`));
+      return { ...summary, elementCount: scene.elements.length };
     });
   }
   /** The personal library shared by every view, stored beside the drawings as a standard `.excalidrawlib`. */

@@ -232,3 +232,43 @@ function seed(text: string) {
   for (const ch of text) hash = Math.imul(hash ^ ch.charCodeAt(0), 16777619);
   return (hash >>> 0) % 2_000_000_000 + 1;
 }
+
+type Loose = Record<string, unknown>;
+
+/**
+ * Copy a saved scene to a new place: every element ID gets `idPrefix` (and every reference to it:
+ * labels, bindings, groups, frames), and the scene's top-left corner moves to `x`/`y`.
+ * Used to insert a user's own template next to what is already drawn.
+ */
+export function relocateScene(scene: Scene, { idPrefix = '', x, y }: { idPrefix?: string; x?: number; y?: number } = {}): Scene {
+  const live = scene.elements.filter(e => !e.isDeleted);
+  const left = live.length ? Math.min(...live.map(e => e.x)) : 0;
+  const top = live.length ? Math.min(...live.map(e => e.y)) : 0;
+  const dx = x === undefined ? 0 : x - left, dy = y === undefined ? 0 : y - top;
+  const ids = new Set(live.map(e => e.id));
+  const id = (value: unknown) => typeof value === 'string' && ids.has(value) ? idPrefix + value : value;
+  const binding = (value: unknown) => value && typeof value === 'object' ? { ...value as Loose, elementId: id((value as Loose).elementId) } : value;
+  const elements = live.map(element => {
+    const e = element as Loose;
+    return { ...e, id: idPrefix + element.id, x: element.x + dx, y: element.y + dy,
+      ...(e.containerId ? { containerId: id(e.containerId) } : {}),
+      ...(e.frameId ? { frameId: id(e.frameId) } : {}),
+      ...(Array.isArray(e.boundElements) ? { boundElements: (e.boundElements as Loose[]).filter(b => ids.has(b.id as string)).map(b => ({ ...b, id: id(b.id) })) } : {}),
+      ...(Array.isArray(e.groupIds) && idPrefix ? { groupIds: (e.groupIds as string[]).map(g => idPrefix + g) } : {}),
+      ...('startBinding' in e ? { startBinding: binding(e.startBinding) } : {}),
+      ...('endBinding' in e ? { endBinding: binding(e.endBinding) } : {}),
+    };
+  });
+  return sceneSchema.parse({ ...scene, elements });
+}
+
+/** Keep a scene's structure and colours but replace every text with a numbered placeholder, for a reusable template. */
+export function withPlaceholders(scene: Scene, locale: TemplateLocale = 'en'): Scene {
+  let count = 0;
+  const elements = scene.elements.map(element => {
+    if (element.type !== 'text' || element.isDeleted) return element;
+    const text = locale === 'zh-CN' ? `[文字 ${++count}]` : `[Text ${++count}]`;
+    return { ...element, text, originalText: text };
+  });
+  return sceneSchema.parse({ ...scene, elements });
+}

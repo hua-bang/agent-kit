@@ -4,9 +4,9 @@ import type { ExcalidrawImperativeAPI, LibraryItems } from '@excalidraw/excalidr
 import type { McpUiTheme } from '@modelcontextprotocol/ext-apps';
 import { bridge, callTool, openExternal } from '../host/bridge';
 import type { Locale, Messages, PromptId } from '../ui/i18n';
-import { IconBack, IconChat, IconCopy, IconDownload, IconIdeas, IconLanguage, IconRefresh, templateIcons } from '../ui/icons';
-import { TEMPLATE_IDS, templateName, templateScene, type TemplateId } from '../../shared/templates';
-import { sceneSchema, sceneOf, type Drawing } from '../../shared/schemas';
+import { IconBack, IconChat, IconCopy, IconDownload, IconIdeas, IconLanguage, IconRefresh, IconSave, IconTemplate, templateIcons } from '../ui/icons';
+import { TEMPLATE_IDS, relocateScene, templateName, templateScene, type TemplateId } from '../../shared/templates';
+import { sceneSchema, sceneOf, type CustomTemplate, type Drawing, type Scene, type TemplateSummary } from '../../shared/schemas';
 import type { useDrawing } from './useDrawing';
 import { Ideas } from './Ideas';
 
@@ -22,9 +22,12 @@ type Props = {
   onNotice(message: string): void;
   toggleLocale(): void;
   messages: ReactNode;
+  /** The user's own templates, to insert like presets. */
+  templates: TemplateSummary[];
+  refreshTemplates(): Promise<void>;
 };
 
-export function Editor({ drawing, doc, isLibrary, t, locale, theme, busy, action, onBack, onNotice, toggleLocale, messages }: Props) {
+export function Editor({ drawing, doc, isLibrary, t, locale, theme, busy, action, onBack, onNotice, toggleLocale, messages, templates, refreshTemplates }: Props) {
   const { status, viewport, api } = drawing;
   // Excalidraw's personal library lives in the plugin data folder, so it survives reopening and is shared by every view.
   const [excalidrawAPI, setExcalidrawAPI] = useState<ExcalidrawImperativeAPI | null>(null);
@@ -44,21 +47,45 @@ export function Editor({ drawing, doc, isLibrary, t, locale, theme, busy, action
   const closeIdeas = useCallback(() => setIdeasOpen(false), []);
   const canAsk = !!bridge.getHostCapabilities()?.message;
   /** Add a starter diagram beside what is already drawn, as one undoable step, and bring it into view. */
-  function insertTemplate(id: TemplateId) {
+  function place(name: string, key: string, build: (at: { idPrefix: string; x: number; y: number }) => Scene) {
     const editor = api.current;
     if (!editor) return;
     setIdeasOpen(false);
     const existing = editor.getSceneElements();
     const right = existing.length ? Math.max(...existing.map(e => e.x + e.width)) + 120 : 0;
     const top = existing.length ? Math.min(...existing.map(e => e.y)) : 0;
-    const scene = templateScene(id, { locale, idPrefix: `${id}-${Date.now().toString(36)}-`, x: right, y: top });
+    const scene = build({ idPrefix: `${key}-${Date.now().toString(36)}-`, x: right, y: top });
+    editor.addFiles(Object.values(scene.files) as never);
     const added = restore({ elements: scene.elements } as unknown as Parameters<typeof restore>[0], null, null, { repairBindings: true }).elements;
     editor.updateScene({ elements: [...editor.getSceneElementsIncludingDeleted(), ...added], captureUpdate: CaptureUpdateAction.IMMEDIATELY });
     editor.scrollToContent(added, { fitToViewport: true, viewportZoomFactor: 0.9, animate: true });
     // A blank, unnamed drawing takes the template's name.
-    if (!existing.length && drawing.title === t.untitled) drawing.rename(templateName(id, locale));
-    onNotice(t.templateInserted(templateName(id, locale)));
+    if (!existing.length && drawing.title === t.untitled) drawing.rename(name);
+    onNotice(t.templateInserted(name));
   }
+  const insertTemplate = (id: TemplateId) => place(templateName(id, locale), id, at => templateScene(id, { locale, ...at }));
+  const insertCustom = (summary: TemplateSummary) => action(async () => {
+    const { template } = await callTool<{ template: CustomTemplate }>('read_template', { id: summary.id });
+    place(template.name, 'tpl', at => relocateScene(template.scene, at));
+  });
+  // Save this drawing as one of the user's templates, from an inline form (host sandboxes may block window.prompt).
+  const [savingTemplate, setSavingTemplate] = useState<{ name: string; description: string; placeholders: boolean } | null>(null);
+  const saveTemplate = () => action(async () => {
+    const form = savingTemplate!;
+    await drawing.save();
+    if (drawing.unsaved || drawing.busySaving) throw new Error(t.waitForSave);
+    const name = form.name.trim() || drawing.title.trim() || t.untitled;
+    await callTool('save_template', { name, description: form.description.trim(), drawingId: drawing.current!.plugin.id, placeholders: form.placeholders, language: locale });
+    setSavingTemplate(null);
+    await refreshTemplates();
+    onNotice(t.templateSaved(name));
+  });
+  /** Ask the AI to draw a template from a description, through the chat. */
+  const generate = (description: string) => action(async () => {
+    setIdeasOpen(false);
+    const { isError } = await bridge.sendMessage({ role: 'user', content: [{ type: 'text', text: t.generatePrompt(description) }] });
+    onNotice(isError ? t.messageRejected : t.generateSent);
+  });
   /** Post a suggested follow-up to the chat as the user, once the latest edits are saved for the agent to read. */
   function ask(prompt: PromptId) {
     setIdeasOpen(false);
@@ -98,7 +125,7 @@ export function Editor({ drawing, doc, isLibrary, t, locale, theme, busy, action
       <span className={`status tone-${tone}`} role="status" aria-live="polite">{tone === 'ok' ? <span className="sr-only">{t.status[status]}</span> : <><i aria-hidden="true" />{t.status[status]}</>}</span>
       {/* Autosave covers the normal case; the button only appears while work is unsaved or paused. */}
       {(tone === 'pending' || tone === 'error') && !stuck && <button className="tool save" disabled={busy} onClick={drawing.retry}>{t.save}</button>}
-      <button type="button" className={`tool ideas-toggle ${ideasOpen ? 'is-open' : ''}`} aria-expanded={ideasOpen} aria-haspopup="dialog" title={t.ideasLabel} onClick={() => setIdeasOpen(open => !open)}><IconIdeas />{t.ideas}</button>
+      <button type="button" className={`tool ideas-toggle ${ideasOpen ? 'is-open' : ''}`} aria-expanded={ideasOpen} aria-haspopup="dialog" title={t.ideasLabel} onClick={() => { if (!ideasOpen) void refreshTemplates(); setIdeasOpen(open => !open); }}><IconIdeas />{t.ideas}</button>
     </header>
     {stuck && <div className="banner error resolve" role="alert">
       <span>{status === 'paused' ? drawing.error || t.conflict : t.unsavedReload}</span>
@@ -110,10 +137,22 @@ export function Editor({ drawing, doc, isLibrary, t, locale, theme, busy, action
           : <button type="button" className="tool" disabled={busy} onClick={() => setConfirmingDiscard(true)}>{t.discardMine}</button>}
       </span>
     </div>}
+    {/* Not a <form>: sandboxed host frames without allow-forms drop submit events. */}
+    {savingTemplate && <div className="banner notice template-form" role="group" aria-label={t.saveAsTemplate}
+      onKeyDown={e => { if (e.key === 'Escape') setSavingTemplate(null); if (e.key === 'Enter' && !e.nativeEvent.isComposing && (e.target as HTMLElement).tagName === 'INPUT') saveTemplate(); }}>
+      <strong>{t.saveAsTemplate}</strong>
+      <label><span>{t.templateNameLabel}</span><input autoFocus value={savingTemplate.name} maxLength={160} onChange={e => setSavingTemplate({ ...savingTemplate, name: e.target.value })} /></label>
+      <label><span>{t.templateDescLabel}</span><input value={savingTemplate.description} maxLength={500} placeholder={t.templateDescPlaceholder} onChange={e => setSavingTemplate({ ...savingTemplate, description: e.target.value })} /></label>
+      <label className="check"><input type="checkbox" checked={savingTemplate.placeholders} onChange={e => setSavingTemplate({ ...savingTemplate, placeholders: e.target.checked })} /><span>{t.templatePlaceholders}</span></label>
+      <span className="resolve-actions">
+        <button type="button" className="tool" onClick={() => setSavingTemplate(null)}>{t.cancel}</button>
+        <button type="button" className="primary" disabled={busy || empty} onClick={saveTemplate}>{t.saveTemplate}</button>
+      </span>
+    </div>}
     {!stuck && messages}
     <section id="main-content" className={`editor ${viewport.fitting ? 'is-fitting' : ''}`} aria-label={t.editorLabel}>
     {ideasOpen && <Ideas t={t} locale={locale} empty={empty} selected={selectedIds.length} canAsk={canAsk} busy={busy}
-      onInsert={insertTemplate} onAsk={ask} onClose={closeIdeas} />}
+      templates={templates} onInsert={insertTemplate} onInsertCustom={insertCustom} onAsk={ask} onGenerate={generate} onClose={closeIdeas} />}
     <Excalidraw key={viewport.editorKey}
       excalidrawAPI={value => { api.current = value; setExcalidrawAPI(value); viewport.mounted(value); }}
       // New shapes and text default to the hand-drawn style: sketchy lines and Virgil
@@ -144,6 +183,7 @@ export function Editor({ drawing, doc, isLibrary, t, locale, theme, busy, action
           <WelcomeScreen.Center.Heading>{t.startFromTemplate}</WelcomeScreen.Center.Heading>
           <WelcomeScreen.Center.Menu>
             {TEMPLATE_IDS.map(id => { const Icon = templateIcons[id]; return <WelcomeScreen.Center.MenuItem key={id} icon={<Icon />} onSelect={() => insertTemplate(id)}>{templateName(id, locale)}</WelcomeScreen.Center.MenuItem>; })}
+            {templates.slice(0, 3).map(template => <WelcomeScreen.Center.MenuItem key={template.id} icon={<IconTemplate />} onSelect={() => insertCustom(template)}>{template.name}</WelcomeScreen.Center.MenuItem>)}
             {canAsk && <WelcomeScreen.Center.MenuItem icon={<IconChat />} onSelect={() => ask('ideate')}>{t.prompts.ideate.label}</WelcomeScreen.Center.MenuItem>}
           </WelcomeScreen.Center.Menu>
         </WelcomeScreen.Center>
@@ -157,6 +197,7 @@ export function Editor({ drawing, doc, isLibrary, t, locale, theme, busy, action
           drawing.load((await callTool<{ document: Drawing }>('create_drawing', { title: source.plugin.title.slice(0, 160 - t.copySuffix.length) + t.copySuffix, scene: sceneOf(source) })).document);
           onNotice(t.copyOpened);
         })}>{t.duplicate}</MainMenu.Item>}
+        <MainMenu.Item icon={<IconSave />} disabled={busy || empty} onSelect={() => setSavingTemplate({ name: drawing.title.trim(), description: '', placeholders: false })}>{t.saveAsTemplate}</MainMenu.Item>
         <MainMenu.Item icon={<IconRefresh />} disabled={busy} onSelect={() => action(async () => {
           if (drawing.busySaving) throw new Error(t.waitForSave);
           // No window.confirm: host sandboxes often block it, which made reload silently do nothing.

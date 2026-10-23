@@ -1,15 +1,16 @@
 import { useEffect, useState } from 'react';
-import { callTool, openExternal } from './host/bridge';
+import { bridge, callTool, openExternal } from './host/bridge';
 import { useHost } from './host/useHost';
 import { useModelContext } from './host/modelContext';
 import { useSession } from './host/session';
 import { useDrawing } from './drawing/useDrawing';
 import { Editor } from './drawing/Editor';
 import { useLibrary } from './library/useLibrary';
+import { useTemplates } from './library/useTemplates';
 import { LibraryView } from './library/LibraryView';
 import { useLocale } from './ui/useLocale';
 import { IconCanvas } from './ui/icons';
-import type { Drawing } from '../shared/schemas';
+import type { Drawing, TemplateSummary } from '../shared/schemas';
 
 /**
  * Composes the surface. The library (Sidebar, conversation panel) lists drawings and
@@ -60,6 +61,10 @@ export function App() {
   const drawing = useDrawing({ connected: host.connected, isLibrary, t, onLoaded: isPanel ? session.remember : undefined });
   const { doc, error } = drawing;
   const library = useLibrary(host.connected, isLibrary && !doc, message => drawing.setError(message));
+  const templates = useTemplates(host.connected);
+  // A drawing or template the agent saved shows up with the next library change.
+  useEffect(() => { if (library.library) void templates.refresh(); }, [library.library, templates.refresh]);
+  const canAsk = host.connected && !!bridge.getHostCapabilities()?.message;
   const modelContext = useModelContext(host.connected, { t, isLibrary, doc, library: library.library, query, session: session.session });
 
   async function action(work: () => Promise<void>) {
@@ -74,7 +79,7 @@ export function App() {
   return <main lang={locale} className={`app ${isLibrary ? 'library-surface' : 'drawing-surface'} ${doc ? 'is-editing' : ''}`}>
     <a className="skip-link" href="#main-content">{t.skipLink}</a>
     {doc ? <Editor drawing={drawing} doc={doc} isLibrary={isLibrary} t={t} locale={locale} theme={host.theme}
-      busy={busy} action={work => void action(work)} onNotice={setNotice} toggleLocale={toggleLocale} messages={messages}
+      busy={busy} action={work => void action(work)} onNotice={setNotice} templates={templates.templates} refreshTemplates={templates.refresh} toggleLocale={toggleLocale} messages={messages}
       onBack={() => void action(async () => {
         await drawing.close();
         setNotice(''); // Notices describe the editor session; do not carry them back to the list.
@@ -83,6 +88,16 @@ export function App() {
     : isLibrary ? <LibraryView library={library.library} session={session.session} query={query} setQuery={setQuery}
       t={t} locale={locale} theme={host.theme} connected={host.connected} busy={busy} refreshing={library.refreshing} failed={!!error}
       onOpen={id => void action(async () => { await open('read_drawing', { id }); setNotice(''); })}
+      templates={templates.templates} canAsk={canAsk}
+      onDeleteTemplate={(template: TemplateSummary) => void action(async () => {
+        await callTool('delete_template', { id: template.id });
+        setNotice(t.templateDeleted(template.name)); await templates.refresh();
+      })}
+      onGenerate={(description, sent) => void action(async () => {
+        const { isError } = await bridge.sendMessage({ role: 'user', content: [{ type: 'text', text: t.generatePrompt(description) }] });
+        setNotice(isError ? t.messageRejected : t.generateSent);
+        if (!isError) sent();
+      })}
       onCreate={(title, created, template) => void action(async () => { await open('create_drawing', { title, ...(template ? { template, language: locale } : {}) }); created(); setNotice(''); })}
       onDelete={d => void action(async () => {
         await callTool('delete_drawing', { id: d.id, expectedRevision: d.revision });

@@ -343,6 +343,39 @@ try {
   await ideas.getByRole('button', { name: '展开细节', exact: true }).click();
   await page.waitForFunction(() => window.sentMessages?.length === 2);
   assert.match((await page.evaluate(() => window.sentMessages[1].content[0].text)), /选中的元素（.*start/);
+  // The user's own templates: save this drawing from the menu, then find it in Ideas and the library.
+  await (await menuItem('存为我的模板')).click();
+  const templateForm = frame.getByRole('group', { name: '存为我的模板' });
+  await templateForm.getByLabel('模板名称').fill('我的流程');
+  await templateForm.getByLabel('什么时候用').fill('排查问题时');
+  await page.screenshot({ path: '.test-output/template-save-form.png' });
+  await templateForm.getByRole('button', { name: '保存模板' }).click();
+  await frame.getByText('已存为模板「我的流程」').waitFor();
+  const savedTemplates = (await client.callTool({ name: 'list_templates', arguments: {} })).structuredContent.templates;
+  assert.deepEqual(savedTemplates.map(t => [t.name, t.description]), [['我的流程', '排查问题时']]);
+  await frame.getByRole('button', { name: '建议', exact: true }).click();
+  await ideas.getByRole('button', { name: '我的流程' }).waitFor();
+  // Describing a new template asks the AI in the chat to draw a draft and save it.
+  await ideas.getByLabel('用一句话生成模板').fill('我们团队的发版流程');
+  await page.screenshot({ path: '.test-output/ideas-my-templates.png' });
+  await ideas.getByRole('button', { name: '发给 AI' }).click();
+  await page.waitForFunction(() => window.sentMessages?.length === 3);
+  assert.match(await page.evaluate(() => window.sentMessages[2].content[0].text), /发版流程.*save_template/);
+  await frame.getByRole('button', { name: '图纸列表', exact: true }).click();
+  await frame.getByRole('tab', { name: /我的模板 1/ }).click();
+  await page.screenshot({ path: '.test-output/library-my-templates.png' });
+  await frame.getByRole('button', { name: '我的流程', exact: true }).click();
+  await titleInput.waitFor({ timeout: 12000 });
+  assert.equal(await titleInput.inputValue(), '我的流程');
+  await frame.getByRole('button', { name: '图纸列表', exact: true }).click();
+  await frame.getByRole('tab', { name: /我的模板 1/ }).click();
+  await frame.getByRole('button', { name: '删除模板「我的流程」' }).click();
+  await frame.getByRole('group', { name: '删除模板「我的流程」' }).getByRole('button', { name: '删除', exact: true }).click();
+  await frame.getByText('已删除模板「我的流程」').waitFor();
+  assert.equal((await client.callTool({ name: 'list_templates', arguments: {} })).structuredContent.templates.length, 0);
+  await frame.getByRole('tab', { name: '预设' }).click();
+  await card('我的流程').click();
+  await titleInput.waitFor({ timeout: 12000 });
   // A blank canvas offers templates on Excalidraw's welcome screen; picking one names the drawing.
   await frame.getByRole('button', { name: '图纸列表', exact: true }).click();
   await frame.getByRole('button', { name: '新建图纸', exact: true }).click();
@@ -368,7 +401,7 @@ try {
   await frame.getByRole('heading', { name: 'Drawings' }).waitFor();
   assert.deepEqual(errors, [], 'No uncaught browser errors');
   assert.deepEqual(external, [], 'No external network requests');
-  console.log('PASS: sandboxed official MCP App bridge, real Excalidraw pointer edit, autosave, Mermaid menu removal and Mermaid/plain-text paste, agent patch, reopen, 375px overflow, library thumbnails/search/copy/delete, templates from the library and welcome screen, inserted templates, suggested chat follow-ups, English locale and language toggle, fixed-ID conversation card opening straight in the editor without writing, card autosave, live agent updates, no external requests');
+  console.log('PASS: sandboxed official MCP App bridge, real Excalidraw pointer edit, autosave, Mermaid menu removal and Mermaid/plain-text paste, agent patch, reopen, 375px overflow, library thumbnails/search/copy/delete, templates from the library and welcome screen, inserted templates, suggested chat follow-ups, saving/using/deleting own templates and describing one for the AI, English locale and language toggle, fixed-ID conversation card opening straight in the editor without writing, card autosave, live agent updates, no external requests');
 } finally {
   await browser?.close(); await client.close(); if (http) await new Promise(resolve => http.close(resolve));
   await rm(dir, { recursive: true, force: true });
