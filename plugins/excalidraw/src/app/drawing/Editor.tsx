@@ -1,12 +1,14 @@
-import { useState, type ReactNode } from 'react';
-import { Excalidraw, MainMenu, restore, serializeAsJSON, useHandleLibrary } from '@excalidraw/excalidraw';
+import { useCallback, useState, type ReactNode } from 'react';
+import { CaptureUpdateAction, Excalidraw, MainMenu, WelcomeScreen, restore, serializeAsJSON, useHandleLibrary } from '@excalidraw/excalidraw';
 import type { ExcalidrawImperativeAPI, LibraryItems } from '@excalidraw/excalidraw/types';
 import type { McpUiTheme } from '@modelcontextprotocol/ext-apps';
 import { bridge, callTool, openExternal } from '../host/bridge';
-import type { Locale, Messages } from '../ui/i18n';
-import { IconBack, IconCopy, IconDownload, IconLanguage, IconRefresh } from '../ui/icons';
+import type { Locale, Messages, PromptId } from '../ui/i18n';
+import { IconBack, IconChat, IconCopy, IconDownload, IconIdeas, IconLanguage, IconRefresh, templateIcons } from '../ui/icons';
+import { TEMPLATE_IDS, templateName, templateScene, type TemplateId } from '../../shared/templates';
 import { sceneSchema, sceneOf, type Drawing } from '../../shared/schemas';
 import type { useDrawing } from './useDrawing';
+import { Ideas } from './Ideas';
 
 type Props = {
   drawing: ReturnType<typeof useDrawing>;
@@ -35,6 +37,39 @@ export function Editor({ drawing, doc, isLibrary, t, locale, theme, busy, action
   const [confirmingDiscard, setConfirmingDiscard] = useState(false);
   const stuck = status === 'paused' || (reloadAsked && drawing.unsaved);
   const resolve = (work: () => Promise<void>) => action(async () => { await work(); setReloadAsked(false); setConfirmingDiscard(false); });
+  // What the canvas holds, for suggestions that fit it. Updated only when it changes, not on every pointer move.
+  const [empty, setEmpty] = useState(() => !doc.elements.some(e => !e.isDeleted));
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [ideasOpen, setIdeasOpen] = useState(false);
+  const closeIdeas = useCallback(() => setIdeasOpen(false), []);
+  const canAsk = !!bridge.getHostCapabilities()?.message;
+  /** Add a starter diagram beside what is already drawn, as one undoable step, and bring it into view. */
+  function insertTemplate(id: TemplateId) {
+    const editor = api.current;
+    if (!editor) return;
+    setIdeasOpen(false);
+    const existing = editor.getSceneElements();
+    const right = existing.length ? Math.max(...existing.map(e => e.x + e.width)) + 120 : 0;
+    const top = existing.length ? Math.min(...existing.map(e => e.y)) : 0;
+    const scene = templateScene(id, { locale, idPrefix: `${id}-${Date.now().toString(36)}-`, x: right, y: top });
+    const added = restore({ elements: scene.elements } as unknown as Parameters<typeof restore>[0], null, null, { repairBindings: true }).elements;
+    editor.updateScene({ elements: [...editor.getSceneElementsIncludingDeleted(), ...added], captureUpdate: CaptureUpdateAction.IMMEDIATELY });
+    editor.scrollToContent(added, { fitToViewport: true, viewportZoomFactor: 0.9, animate: true });
+    // A blank, unnamed drawing takes the template's name.
+    if (!existing.length && drawing.title === t.untitled) drawing.rename(templateName(id, locale));
+    onNotice(t.templateInserted(templateName(id, locale)));
+  }
+  /** Post a suggested follow-up to the chat as the user, once the latest edits are saved for the agent to read. */
+  function ask(prompt: PromptId) {
+    setIdeasOpen(false);
+    action(async () => {
+      await drawing.save();
+      const source = drawing.current!;
+      const text = t.prompts[prompt].text({ title: drawing.title.trim() || source.plugin.title, id: source.plugin.id, ids: selectedIds });
+      const { isError } = await bridge.sendMessage({ role: 'user', content: [{ type: 'text', text }] });
+      onNotice(isError ? t.messageRejected : t.messageSent);
+    });
+  }
   const tone = status === 'paused' || status === 'disconnected' ? 'error' : status === 'saving' || status === 'unsaved' ? 'pending' : status === 'saved' ? 'ok' : 'idle';
   async function download() {
     const source = drawing.current;
@@ -63,6 +98,7 @@ export function Editor({ drawing, doc, isLibrary, t, locale, theme, busy, action
       <span className={`status tone-${tone}`} role="status" aria-live="polite">{tone === 'ok' ? <span className="sr-only">{t.status[status]}</span> : <><i aria-hidden="true" />{t.status[status]}</>}</span>
       {/* Autosave covers the normal case; the button only appears while work is unsaved or paused. */}
       {(tone === 'pending' || tone === 'error') && !stuck && <button className="tool save" disabled={busy} onClick={drawing.retry}>{t.save}</button>}
+      <button type="button" className={`tool ideas-toggle ${ideasOpen ? 'is-open' : ''}`} aria-expanded={ideasOpen} aria-haspopup="dialog" title={t.ideasLabel} onClick={() => setIdeasOpen(open => !open)}><IconIdeas />{t.ideas}</button>
     </header>
     {stuck && <div className="banner error resolve" role="alert">
       <span>{status === 'paused' ? drawing.error || t.conflict : t.unsavedReload}</span>
@@ -76,6 +112,8 @@ export function Editor({ drawing, doc, isLibrary, t, locale, theme, busy, action
     </div>}
     {!stuck && messages}
     <section id="main-content" className={`editor ${viewport.fitting ? 'is-fitting' : ''}`} aria-label={t.editorLabel}>
+    {ideasOpen && <Ideas t={t} locale={locale} empty={empty} selected={selectedIds.length} canAsk={canAsk} busy={busy}
+      onInsert={insertTemplate} onAsk={ask} onClose={closeIdeas} />}
     <Excalidraw key={viewport.editorKey}
       excalidrawAPI={value => { api.current = value; setExcalidrawAPI(value); viewport.mounted(value); }}
       // New shapes and text default to the hand-drawn style: sketchy lines and Virgil
@@ -91,9 +129,25 @@ export function Editor({ drawing, doc, isLibrary, t, locale, theme, busy, action
       }}
       UIOptions={{ canvasActions: { loadScene: false, saveToActiveFile: false, export: false, saveAsImage: false, toggleTheme: false }, tools: { image: true } }}
       onChange={(elements, appState, files) => {
+        const isEmpty = !elements.some(e => !e.isDeleted);
+        if (isEmpty !== empty) setEmpty(isEmpty);
+        const selection = Object.keys(appState.selectedElementIds).filter(id => appState.selectedElementIds[id]);
+        if (selection.join() !== selectedIds.join()) setSelectedIds(selection);
         try { drawing.edited(sceneSchema.parse({ elements, appState, files })); }
         catch (e) { drawing.stopSaving(t.cannotAutosave(String(e))); }
       }}>
+      {/* Shown by Excalidraw only while the canvas is empty. */}
+      <WelcomeScreen>
+        <WelcomeScreen.Hints.MenuHint />
+        <WelcomeScreen.Hints.ToolbarHint />
+        <WelcomeScreen.Center>
+          <WelcomeScreen.Center.Heading>{t.startFromTemplate}</WelcomeScreen.Center.Heading>
+          <WelcomeScreen.Center.Menu>
+            {TEMPLATE_IDS.map(id => { const Icon = templateIcons[id]; return <WelcomeScreen.Center.MenuItem key={id} icon={<Icon />} onSelect={() => insertTemplate(id)}>{templateName(id, locale)}</WelcomeScreen.Center.MenuItem>; })}
+            {canAsk && <WelcomeScreen.Center.MenuItem icon={<IconChat />} onSelect={() => ask('ideate')}>{t.prompts.ideate.label}</WelcomeScreen.Center.MenuItem>}
+          </WelcomeScreen.Center.Menu>
+        </WelcomeScreen.Center>
+      </WelcomeScreen>
       <MainMenu>
         <MainMenu.Item icon={<IconDownload />} onSelect={() => void download()}>{t.export}</MainMenu.Item>
         {isLibrary && <MainMenu.Item icon={<IconCopy />} disabled={busy} onSelect={() => action(async () => {

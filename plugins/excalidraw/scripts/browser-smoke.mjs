@@ -307,6 +307,51 @@ try {
   await page.goto(`http://127.0.0.1:${http.address().port}`);
   await frame.locator('.drawing img').first().waitFor();
   await page.screenshot({ path: '.test-output/qa-library-mobile.png' });
+  // Presets: a library template creates a ready, bound diagram named after it.
+  await page.setViewportSize({ width: 1200, height: 950 });
+  await frame.getByRole('group', { name: '从模板新建' }).getByRole('button', { name: '流程图', exact: true }).click();
+  await titleInput.waitFor({ timeout: 12000 });
+  assert.equal(await titleInput.inputValue(), '流程图');
+  const flowId = (await client.callTool({ name: 'list_drawings', arguments: {} })).structuredContent.drawings.find(d => d.title === '流程图').id;
+  const flow = Object.fromEntries((await client.callTool({ name: 'read_drawing', arguments: { id: flowId } })).structuredContent.document.elements.map(e => [e.id, e]));
+  assert.equal(flow['start-label'].text, '开始');
+  assert.equal(flow['start-label'].containerId, 'start');
+  assert.equal(flow['check-done'].endBinding.elementId, 'done');
+  await page.screenshot({ path: '.test-output/template-flowchart.png' });
+  // Suggestions follow the canvas: whole-drawing prompts, posted to the chat with the drawing ID.
+  await frame.getByRole('button', { name: '建议', exact: true }).click();
+  const ideas = frame.getByRole('dialog', { name: '模板与 AI 建议' });
+  await ideas.waitFor();
+  await page.screenshot({ path: '.test-output/ideas-panel.png' });
+  await ideas.getByRole('button', { name: '整理布局', exact: true }).click();
+  await frame.getByText('已发到对话').waitFor();
+  const sent = await page.evaluate(() => window.sentMessages);
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].role, 'user');
+  assert.match(sent[0].content[0].text, new RegExp(`整理.*${flowId}`));
+  // Inserting a template adds it beside the drawing, with fresh IDs, and autosaves.
+  await frame.getByRole('button', { name: '建议', exact: true }).click();
+  await ideas.getByRole('button', { name: '看板', exact: true }).click();
+  await until(async () => (await client.callTool({ name: 'read_drawing', arguments: { id: flowId } })).structuredContent.document.elements.some(e => e.id.startsWith('kanban-')));
+  const merged = (await client.callTool({ name: 'read_drawing', arguments: { id: flowId } })).structuredContent.document.elements;
+  assert.ok(merged.some(e => e.id === 'start'), 'Inserting keeps the existing diagram');
+  assert.ok(Math.min(...merged.filter(e => e.id.startsWith('kanban-')).map(e => e.x)) > Math.max(...merged.filter(e => !e.id.startsWith('kanban-')).map(e => e.x + e.width)), 'Inserted beside existing content');
+  // With a selection, the prompts are about the selected elements.
+  await frame.locator('.excalidraw canvas.interactive').first().click({ position: { x: 5, y: 300 } });
+  await page.keyboard.press('Control+a');
+  await frame.getByRole('button', { name: '建议', exact: true }).click();
+  await ideas.getByRole('button', { name: '展开细节', exact: true }).click();
+  await page.waitForFunction(() => window.sentMessages?.length === 2);
+  assert.match((await page.evaluate(() => window.sentMessages[1].content[0].text)), /选中的元素（.*start/);
+  // A blank canvas offers templates on Excalidraw's welcome screen; picking one names the drawing.
+  await frame.getByRole('button', { name: '图纸列表', exact: true }).click();
+  await frame.getByRole('button', { name: '新建图纸', exact: true }).click();
+  await titleInput.waitFor({ timeout: 12000 });
+  await frame.locator('.welcome-screen-center').getByRole('button', { name: '思维导图' }).click();
+  await until(async () => (await client.callTool({ name: 'list_drawings', arguments: {} })).structuredContent.drawings.some(d => d.title === '思维导图'));
+  await page.screenshot({ path: '.test-output/template-welcome.png' });
+  await frame.getByRole('button', { name: '图纸列表', exact: true }).click();
+  await card('思维导图').waitFor();
   // English host locale: UI text and Excalidraw's own language follow it.
   await page.goto(`http://127.0.0.1:${http.address().port}/?locale=en-US`);
   await frame.getByRole('heading', { name: 'Drawings' }).waitFor();
@@ -323,7 +368,7 @@ try {
   await frame.getByRole('heading', { name: 'Drawings' }).waitFor();
   assert.deepEqual(errors, [], 'No uncaught browser errors');
   assert.deepEqual(external, [], 'No external network requests');
-  console.log('PASS: sandboxed official MCP App bridge, real Excalidraw pointer edit, autosave, Mermaid menu removal and Mermaid/plain-text paste, agent patch, reopen, 375px overflow, library thumbnails/search/copy/delete, English locale and language toggle, fixed-ID conversation card opening straight in the editor without writing, card autosave, live agent updates, no external requests');
+  console.log('PASS: sandboxed official MCP App bridge, real Excalidraw pointer edit, autosave, Mermaid menu removal and Mermaid/plain-text paste, agent patch, reopen, 375px overflow, library thumbnails/search/copy/delete, templates from the library and welcome screen, inserted templates, suggested chat follow-ups, English locale and language toggle, fixed-ID conversation card opening straight in the editor without writing, card autosave, live agent updates, no external requests');
 } finally {
   await browser?.close(); await client.close(); if (http) await new Promise(resolve => http.close(resolve));
   await rm(dir, { recursive: true, force: true });

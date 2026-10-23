@@ -83,7 +83,7 @@ export function App() {
     : isLibrary ? <LibraryView library={library.library} session={session.session} query={query} setQuery={setQuery}
       t={t} locale={locale} theme={host.theme} connected={host.connected} busy={busy} refreshing={library.refreshing} failed={!!error}
       onOpen={id => void action(async () => { await open('read_drawing', { id }); setNotice(''); })}
-      onCreate={(title, created) => void action(async () => { await open('create_drawing', { title }); created(); setNotice(''); })}
+      onCreate={(title, created, template) => void action(async () => { await open('create_drawing', { title, ...(template ? { template, language: locale } : {}) }); created(); setNotice(''); })}
       onDelete={d => void action(async () => {
         await callTool('delete_drawing', { id: d.id, expectedRevision: d.revision });
         setNotice(t.deleted(d.title)); await library.refresh();

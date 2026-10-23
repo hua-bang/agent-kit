@@ -3,6 +3,9 @@
 export type Locale = 'zh-CN' | 'en';
 export type Status = 'connecting' | 'connected' | 'disconnected' | 'saved' | 'saving' | 'unsaved' | 'paused';
 export type PreviewState = 'loading' | 'empty' | 'unavailable';
+/** The drawing (and selected element IDs) a suggested chat message is about. */
+export type PromptTarget = { title: string; id: string; ids: string[] };
+export type PromptId = keyof Messages['prompts'];
 
 const zh = {
   status: { connecting: '连接宿主中', connected: '已连接', disconnected: '未连接', saved: '已保存', saving: '正在保存', unsaved: '有未保存修改', paused: '保存暂停，修改仍在编辑器中' } satisfies Record<Status, string>,
@@ -68,6 +71,27 @@ const zh = {
   switchLanguageLabel: '切换到英文',
   toolFailed: '工具调用失败',
   noStructuredData: '工具没有返回结构化数据',
+  fromTemplate: '从模板新建',
+  startFromTemplate: '从模板开始，或直接画',
+  ideas: '建议',
+  ideasLabel: '模板与 AI 建议',
+  insertTemplate: '插入模板',
+  askAi: '交给 AI',
+  askAiSelection: (count: number) => `针对选中的 ${count} 个元素`,
+  askAiUnavailable: '当前宿主不支持从画板发消息；可以直接在对话里描述想怎么改。',
+  messageSent: '已发到对话，AI 会读取最新的图再动手。',
+  messageRejected: '宿主没有接受这条消息，可以直接在对话里描述想怎么改。',
+  templateInserted: (name: string) => `已插入「${name}」，按 Ctrl+Z 可撤销。`,
+  prompts: {
+    ideate: { label: '让 AI 帮我构思', text: (d: PromptTarget) => `我想在图纸「${d.title}」（id ${d.id}）里画图。请先问我要画什么，并给出 3 个可选方向。` },
+    tidy: { label: '整理布局', text: (d: PromptTarget) => `请整理图纸「${d.title}」（id ${d.id}）的布局：对齐节点、统一间距、减少箭头交叉，不改文字内容。` },
+    complete: { label: '补全缺失部分', text: (d: PromptTarget) => `请检查图纸「${d.title}」（id ${d.id}），补全缺失的步骤或组件，并告诉我加了什么。` },
+    explain: { label: '解释这张图', text: (d: PromptTarget) => `请读取图纸「${d.title}」（id ${d.id}），用几句话说明它表达了什么，并指出可能遗漏或矛盾的地方。` },
+    restyle: { label: '统一配色', text: (d: PromptTarget) => `请统一图纸「${d.title}」（id ${d.id}）的配色和样式：同类节点同色，保留手绘风格。` },
+    expand: { label: '展开细节', text: (d: PromptTarget) => `请在图纸「${d.title}」（id ${d.id}）里为我选中的元素（${d.ids.join(', ')}）补充下一层细节，新节点放在它们旁边并连好箭头。` },
+    rewrite: { label: '改写文字', text: (d: PromptTarget) => `请改写图纸「${d.title}」（id ${d.id}）中我选中元素（${d.ids.join(', ')}）的文字，让表达更清楚简洁，其他元素不动。` },
+    tidySelection: { label: '只整理选中部分', text: (d: PromptTarget) => `请只整理图纸「${d.title}」（id ${d.id}）中我选中元素（${d.ids.join(', ')}）的布局，其他元素保持原位。` },
+  },
 };
 
 export type Messages = typeof zh;
@@ -136,6 +160,27 @@ const en: Messages = {
   switchLanguageLabel: 'Switch to Chinese',
   toolFailed: 'Tool call failed',
   noStructuredData: 'The tool returned no structured data',
+  fromTemplate: 'New from template',
+  startFromTemplate: 'Start from a template, or just draw',
+  ideas: 'Ideas',
+  ideasLabel: 'Templates and AI suggestions',
+  insertTemplate: 'Insert a template',
+  askAi: 'Ask AI',
+  askAiSelection: count => `For the ${count} selected element(s)`,
+  askAiUnavailable: 'This host does not accept messages from the canvas; describe the change in the chat instead.',
+  messageSent: 'Sent to the chat; the AI will read the latest drawing before editing.',
+  messageRejected: 'The host did not accept the message; describe the change in the chat instead.',
+  templateInserted: name => `Inserted “${name}”. Press Ctrl+Z to undo.`,
+  prompts: {
+    ideate: { label: 'Help me plan this', text: d => `I want to draw in “${d.title}” (id ${d.id}). Ask me what to draw first, and offer 3 directions to choose from.` },
+    tidy: { label: 'Tidy layout', text: d => `Tidy the layout of drawing “${d.title}” (id ${d.id}): align nodes, even out spacing and reduce crossing arrows, without changing any text.` },
+    complete: { label: 'Fill the gaps', text: d => `Review drawing “${d.title}” (id ${d.id}), add missing steps or components, and tell me what you added.` },
+    explain: { label: 'Explain it', text: d => `Read drawing “${d.title}” (id ${d.id}), explain in a few sentences what it shows, and point out anything missing or inconsistent.` },
+    restyle: { label: 'Unify colours', text: d => `Unify the colours and styles in drawing “${d.title}” (id ${d.id}): same colour for the same kind of node, keep the hand-drawn look.` },
+    expand: { label: 'Expand details', text: d => `In drawing “${d.title}” (id ${d.id}), add the next level of detail for the elements I selected (${d.ids.join(', ')}); place new nodes beside them and connect them with arrows.` },
+    rewrite: { label: 'Rewrite text', text: d => `Rewrite the text of the elements I selected (${d.ids.join(', ')}) in drawing “${d.title}” (id ${d.id}) to be clearer and shorter; leave everything else alone.` },
+    tidySelection: { label: 'Tidy selection only', text: d => `Tidy only the layout of the elements I selected (${d.ids.join(', ')}) in drawing “${d.title}” (id ${d.id}); keep everything else where it is.` },
+  },
 };
 
 const messages: Record<Locale, Messages> = { 'zh-CN': zh, en };

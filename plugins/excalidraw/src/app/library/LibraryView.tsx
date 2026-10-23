@@ -1,7 +1,8 @@
 import { useState, type ReactNode } from 'react';
 import type { McpUiTheme } from '@modelcontextprotocol/ext-apps';
 import type { Locale, Messages } from '../ui/i18n';
-import { IconCanvas, IconLanguage, IconPlus, IconRefresh, IconSearch, IconTrash } from '../ui/icons';
+import { IconCanvas, IconLanguage, IconPlus, IconRefresh, IconSearch, IconTrash, templateIcons } from '../ui/icons';
+import { TEMPLATE_IDS, templateName, type TemplateId } from '../../shared/templates';
 import type { DrawingSummary } from '../../shared/schemas';
 import { Preview } from './Preview';
 import type { Library } from './useLibrary';
@@ -14,8 +15,8 @@ type Props = {
   t: Messages; locale: Locale; theme: McpUiTheme;
   connected: boolean; busy: boolean; refreshing: boolean; failed: boolean;
   onOpen(id: string): void;
-  /** Create and open a drawing; `created` runs only on success. */
-  onCreate(title: string, created: () => void): void;
+  /** Create and open a drawing, blank or from a starter template; `created` runs only on success. */
+  onCreate(title: string, created: () => void, template?: TemplateId): void;
   /** Delete a drawing after the user confirmed on its card. */
   onDelete(drawing: DrawingSummary): void;
   onRefresh(): void;
@@ -62,6 +63,11 @@ export function LibraryView({ library, session, query, setQuery, t, locale, them
           <input aria-label={t.newTitleLabel} placeholder={t.newTitleLabel} value={newTitle} maxLength={160} onChange={e => setNewTitle(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) e.currentTarget.parentElement?.querySelector('button')?.click(); }} />
           <button type="button" className="primary" disabled={!connected || busy} onClick={() => onCreate(newTitle.trim() || t.untitled, () => setNewTitle(''))}><IconPlus />{t.newDrawing}</button>
         </div>
+      </div>
+      <div className="templates" role="group" aria-label={t.fromTemplate}>
+        <span className="meta">{t.fromTemplate}</span>
+        {TEMPLATE_IDS.map(id => { const Icon = templateIcons[id]; return <button key={id} type="button" className="tool" disabled={!connected || busy}
+          onClick={() => onCreate(newTitle.trim() || templateName(id, locale), () => setNewTitle(''), id)}><Icon />{templateName(id, locale)}</button>; })}
       </div>
       {!library ? <p className="empty-state" role="status">{failed ? t.libraryLoadFailed : connected ? t.libraryLoading : t.waitingHost}</p> : <>
         {library.warnings.length > 0 && <p className="banner error inline" role="alert">{t.unreadable(library.warnings.length)}</p>}
