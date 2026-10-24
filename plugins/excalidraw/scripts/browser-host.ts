@@ -2,7 +2,7 @@ import { AppBridge, PostMessageTransport } from '@modelcontextprotocol/ext-apps/
 const iframe = document.querySelector('iframe')!;
 const params = new URLSearchParams(location.search);
 const id = params.get('drawing');
-const bridge = new AppBridge(null, { name: 'local-test-host', version: '1' }, { serverTools: {}, updateModelContext: { text: {} }, downloadFile: {} }, {
+const bridge = new AppBridge(null, { name: 'local-test-host', version: '1' }, { serverTools: {}, updateModelContext: { text: {} }, downloadFile: {}, message: { text: {} } }, {
   hostContext: { theme: 'light', displayMode: 'inline', availableDisplayModes: ['inline'], locale: params.get('locale') ?? 'zh-CN' },
 });
 const call = async (name: string, args = {}) => (await fetch('/tool', { method: 'POST', body: JSON.stringify({ name, arguments: args }) })).json();
@@ -11,6 +11,8 @@ bridge.oncalltool = params => call(params.name, params.arguments);
 bridge.onupdatemodelcontext = async params => { Object.assign(window, { modelContext: params }); return {}; };
 // Host-mediated downloads: record what the view asked to save.
 bridge.ondownloadfile = async params => { Object.assign(window, { downloaded: params.contents }); return {}; };
+// Chat messages the view posts as the user (suggested follow-ups).
+bridge.onmessage = async params => { Object.assign(window, { sentMessages: [...((window as never as { sentMessages?: unknown[] }).sentMessages ?? []), params] }); return {}; };
 // What an OpenAI host sends when the user removes the context attachment.
 Object.assign(window, { removeModelContext: () => bridge.sendHostContextChange({ 'openai/modelContext': null } as never) });
 bridge.oninitialized = async () => {

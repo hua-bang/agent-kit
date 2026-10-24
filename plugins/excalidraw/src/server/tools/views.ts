@@ -1,7 +1,9 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { registerAppTool } from '@modelcontextprotocol/ext-apps/server';
 import type { DrawingStore } from '../../storage/drawings.js';
+import { z } from 'zod';
 import { idSchema, sceneSchema, titleSchema } from '../../shared/schemas.js';
+import { TEMPLATE_IDS, templateScene, type TemplateId } from '../../shared/templates.js';
 import { config } from '../config.js';
 import { LIBRARY_URI, PANEL_URI, UI_URI, readonly, writable } from '../constants.js';
 import { guarded } from '../result.js';
@@ -29,7 +31,17 @@ export function registerViewTools(server: McpServer, store: DrawingStore) {
     inputSchema: { id: idSchema }, _meta: card, annotations: readonly,
   }, ({ id }) => guarded(async () => ({ document: await store.read(id) })));
   registerAppTool(server, 'create_drawing', {
-    description: 'Create a local drawing and show it as a fixed-ID card that opens straight in the editor. Optional scene contains Excalidraw elements; omit for a blank canvas.',
-    inputSchema: { title: titleSchema, scene: sceneSchema.optional() }, annotations: writable, _meta: card,
-  }, ({ title, scene }) => guarded(async () => ({ document: await store.create(title, scene) })));
+    description: 'Create a local drawing and show it as a fixed-ID card that opens straight in the editor. Optional scene contains Excalidraw elements; '
+      + `or pass template (a built-in ${TEMPLATE_IDS.join(', ')} in language zh-CN or en, or the UUID of one of the user's own templates from list_templates) to start from an editable starter diagram, then read and patch it to fit; omit both for a blank canvas.`,
+    inputSchema: {
+      title: titleSchema, scene: sceneSchema.optional(),
+      template: z.union([z.enum(TEMPLATE_IDS), idSchema]).optional(), language: z.enum(['zh-CN', 'en']).default('en'),
+    }, annotations: writable, _meta: card,
+  }, ({ title, scene, template, language }) => guarded(async () => {
+    if (scene && template) throw new Error('Pass either scene or template, not both');
+    const fromTemplate = !template ? scene
+      : (TEMPLATE_IDS as readonly string[]).includes(template) ? templateScene(template as TemplateId, { locale: language })
+      : (await store.readTemplate(template)).scene;
+    return { document: await store.create(title, fromTemplate) };
+  }));
 }

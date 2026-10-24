@@ -19,7 +19,7 @@ try {
   await connect();
   assert.equal(client.getServerVersion().name, 'local-excalidraw');
   assert.equal(client.getServerVersion().title, 'Agentic Excalidraw');
-  const tools = await client.listTools(); assert.equal(tools.tools.length, 12);
+  const tools = await client.listTools(); assert.equal(tools.tools.length, 16);
   assert.equal(tools.tools.find(t => t.name === 'open_library').title, 'Agentic Excalidraw');
   assert.equal(tools.tools.find(t => t.name === 'open_panel').title, 'Agentic Excalidraw');
   assert.equal(tools.tools.find(t => t.name === 'mention_drawings').title, 'Agentic Excalidraw');
@@ -45,6 +45,22 @@ try {
   assert.ok(!html.contents[0].text.match(/<script[^>]*>/)?.[0].includes('src='));
   const { document: doc } = await call('create_drawing', { title: '集成验证' });
   const id = doc.plugin.id;
+  // Presets: a template creates a ready diagram; a template plus a scene is refused.
+  const preset = (await call('create_drawing', { title: '模板验证', template: 'flowchart', language: 'zh-CN' })).document;
+  assert.equal(preset.elements.find(e => e.id === 'start-label').text, '开始');
+  const both = await client.callTool({ name: 'create_drawing', arguments: { title: 'x', template: 'kanban', scene: { elements: [] } } });
+  assert.equal(both.isError, true);
+  // The user's own templates: save from a drawing (optionally as placeholders), list, create from, delete.
+  const mine = (await call('save_template', { name: '发版流程', description: '每次发版', drawingId: preset.plugin.id, placeholders: true, language: 'zh-CN' })).template;
+  const listedTemplates = await call('list_templates', {});
+  assert.equal(listedTemplates.builtIn.length, 6);
+  assert.deepEqual(listedTemplates.templates.map(t => t.name), ['发版流程']);
+  const fromMine = (await call('create_drawing', { title: '用我的模板', template: mine.id })).document;
+  assert.equal(fromMine.elements.find(e => e.id === 'start-label').text, '[文字 1]');
+  await call('delete_template', { id: mine.id });
+  assert.equal((await call('list_templates', {})).templates.length, 0);
+  await call('delete_drawing', { id: fromMine.plugin.id, expectedRevision: fromMine.plugin.revision });
+  await call('delete_drawing', { id: preset.plugin.id, expectedRevision: preset.plugin.revision });
   // Composer @-mentions: host-only search returns resource links that read back the drawing.
   const mention = tools.tools.find(t => t.name === 'mention_drawings');
   assert.deepEqual(mention._meta['openai/extensions'], { 'mentions/search': {} });
@@ -79,5 +95,5 @@ try {
   const item = { id: 'lib-1', status: 'unpublished', created: 1, elements: [box] };
   assert.equal((await call('save_library', { libraryItems: [item] })).saved, 1);
   assert.deepEqual((await call('read_library')).libraryItems, [item]);
-  console.log('PASS: real stdio handshake, resource, @-mention search and drawing resources, create, patch, conflict, process restart, user-position preservation, delete, personal library');
+  console.log('PASS: real stdio handshake, resource, @-mention search and drawing resources, create, template presets, user templates, patch, conflict, process restart, user-position preservation, delete, personal library');
 } finally { await client?.close(); await rm(dir, { recursive: true, force: true }); }

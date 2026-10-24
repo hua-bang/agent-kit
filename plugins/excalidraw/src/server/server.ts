@@ -5,6 +5,7 @@ import { registerAppPages, registerDrawingResources } from './resources.js';
 import { registerViewTools } from './tools/views.js';
 import { registerDrawingTools } from './tools/drawings.js';
 import { registerMentionTool } from './tools/mentions.js';
+import { registerTemplateTools } from './tools/templates.js';
 import { registerDebugTool } from './debug.js';
 
 export { UI_URI, LIBRARY_URI, drawingUri } from './constants.js';
@@ -17,6 +18,7 @@ export function createServer(store = new DrawingStore(), htmlPath = new URL('../
   registerMentionTool(server, store);
   registerViewTools(server, store);
   registerDrawingTools(server, store);
+  registerTemplateTools(server, store);
   registerDebugTool(server);
   return server;
 }

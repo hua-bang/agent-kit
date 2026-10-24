@@ -114,4 +114,13 @@ describe('patch', () => {
     expect(next.elements.map(e => e.id)).toEqual(['box', 'new']);
     await expect(store.patch(doc.plugin.id, 1, [], ['box'])).rejects.toBeInstanceOf(ConflictError);
   });
+  it('keeps user templates beside drawings and moves deleted ones to trash', async () => {
+    const template = await store.createTemplate('发版流程', '每次发版前', { ...emptyScene, elements: [box] });
+    expect((await store.listTemplates()).templates.map(t => [t.name, t.elementCount])).toEqual([['发版流程', 1]]);
+    expect((await new DrawingStore(root).readTemplate(template.id)).scene.elements[0].id).toBe('box');
+    await expect(store.createTemplate('空的', '', emptyScene)).rejects.toThrow(/at least one element/);
+    await store.deleteTemplate(template.id);
+    expect((await store.listTemplates()).templates).toEqual([]);
+    expect(await readdir(join(root, 'trash'))).toContain(`template-${template.id}.json`);
+  });
 });

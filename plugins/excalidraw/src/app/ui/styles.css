@@ -108,6 +108,11 @@ html, body, #root { height: 100%; }
 .banner.inline { margin: 0 0 12px; }
 .banner .dismiss { width: 28px; height: 28px; color: inherit; font-size: 18px; }
 .resolve { flex-wrap: wrap; }
+.template-form { flex-wrap: wrap; justify-content: flex-start; gap: 8px 14px; color: var(--ink); }
+.template-form label { display: flex; align-items: center; gap: 6px; }
+.template-form label > span { color: var(--primary-text); white-space: nowrap; }
+.template-form input:not([type="checkbox"]) { height: 32px; width: 180px; }
+.template-form .resolve-actions { margin-left: auto; }
 .resolve-actions { display: flex; flex-wrap: wrap; gap: 6px; }
 .resolve-actions button { height: 32px; font-size: 13px; }
 /* Installing from the public library site needs a redirect back into this page, which a host sandbox cannot receive. */
@@ -129,6 +134,24 @@ html, body, #root { height: 100%; }
 .title { flex: 1; min-width: 120px; padding: 0 8px; border-color: transparent; background: transparent; font-weight: 600; }
 @media (hover: hover) { .title:hover { background: var(--button); } }
 .save { height: 32px; padding: 0 12px; font-size: 13px; }
+.ideas-toggle { height: 32px; padding: 0 10px; font-size: 13px; flex-shrink: 0; }
+.ideas-toggle.is-open { border-color: var(--primary); }
+/* Suggestions: an island over the canvas's top-right corner, so the card keeps its height. */
+.app > .editor { position: relative; }
+.ideas-panel {
+  position: absolute; top: 8px; right: 8px; z-index: 20; display: flex; flex-direction: column; gap: 8px;
+  width: min(320px, calc(100% - 16px)); max-height: calc(100% - 16px); overflow: auto; padding: 12px;
+  border-radius: var(--radius); background: var(--island); box-shadow: var(--shadow-island);
+}
+.ideas-panel h2 { margin: 0; font-size: 12px; font-weight: 600; color: var(--muted); }
+.ideas-panel h2:not(:first-child) { margin-top: 4px; }
+.ideas-list { display: flex; flex-direction: column; gap: 6px; }
+.ideas-list button { justify-content: flex-start; height: 34px; font-size: 13px; }
+.ideas-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+.ideas-generate { display: flex; gap: 6px; }
+.ideas-generate input { flex: 1; height: 34px; font-size: 13px; }
+.ideas-generate button { height: 34px; padding: 0 10px; font-size: 13px; }
+.ideas-grid button { justify-content: flex-start; height: 34px; padding: 0 10px; font-size: 13px; overflow: hidden; text-overflow: ellipsis; }
 .app > .editor { flex: 1 0 auto; height: 600px; min-height: 400px; }
 /* Host-fixed frame (sidebar, fullscreen): fit the editor inside it instead. */
 [data-fill] .app > .editor { flex: 1 1 0; height: auto; min-height: 320px; }
@@ -162,6 +185,11 @@ html, body, #root { height: 100%; }
 .search input { width: 100%; padding-left: 34px; }
 .composer { display: flex; gap: 8px; flex: 0 1 340px; min-width: 0; }
 .composer input { flex: 1; width: 100%; }
+.view-tabs { display: inline-flex; gap: 2px; margin-right: auto; padding: 3px; border-radius: 10px; background: var(--button); }
+.view-tabs button { height: 32px; padding: 0 12px; gap: 6px; color: var(--muted); font-size: 15px; }
+.view-tabs button.is-active { background: var(--island); color: var(--ink); font-weight: 600; box-shadow: var(--shadow-island); }
+.view-tabs .count { margin: 0; }
+.template-empty { margin: 0 0 20px; }
 .group-title { margin: 4px 0 10px; font-size: 13px; font-weight: 600; color: var(--muted); }
 .drawing-grid + .group-title { margin-top: 24px; }
 .drawing-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px; }

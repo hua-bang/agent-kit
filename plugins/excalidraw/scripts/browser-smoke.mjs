@@ -307,6 +307,90 @@ try {
   await page.goto(`http://127.0.0.1:${http.address().port}`);
   await frame.locator('.drawing img').first().waitFor();
   await page.screenshot({ path: '.test-output/qa-library-mobile.png' });
+  // Presets: a library template creates a ready, bound diagram named after it.
+  await page.setViewportSize({ width: 1200, height: 950 });
+  // Templates live in their own tab beside the drawings, as cards with thumbnails.
+  await frame.getByRole('tab', { name: /^模板/ }).click();
+  await frame.locator('.drawing img').first().waitFor();
+  await page.screenshot({ path: '.test-output/library-templates-tab.png' });
+  await card('流程图').click();
+  await titleInput.waitFor({ timeout: 12000 });
+  assert.equal(await titleInput.inputValue(), '流程图');
+  const flowId = (await client.callTool({ name: 'list_drawings', arguments: {} })).structuredContent.drawings.find(d => d.title === '流程图').id;
+  const flow = Object.fromEntries((await client.callTool({ name: 'read_drawing', arguments: { id: flowId } })).structuredContent.document.elements.map(e => [e.id, e]));
+  assert.equal(flow['start-label'].text, '开始');
+  assert.equal(flow['start-label'].containerId, 'start');
+  assert.equal(flow['check-done'].endBinding.elementId, 'done');
+  await page.screenshot({ path: '.test-output/template-flowchart.png' });
+  // Suggestions follow the canvas: whole-drawing prompts, posted to the chat with the drawing ID.
+  await frame.getByRole('button', { name: '建议', exact: true }).click();
+  const ideas = frame.getByRole('dialog', { name: '模板与 AI 建议' });
+  await ideas.waitFor();
+  await page.screenshot({ path: '.test-output/ideas-panel.png' });
+  await ideas.getByRole('button', { name: '整理布局', exact: true }).click();
+  await frame.getByText('已发到对话').waitFor();
+  const sent = await page.evaluate(() => window.sentMessages);
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].role, 'user');
+  assert.match(sent[0].content[0].text, new RegExp(`整理.*${flowId}`));
+  // Inserting a template adds it beside the drawing, with fresh IDs, and autosaves.
+  await frame.getByRole('button', { name: '建议', exact: true }).click();
+  await ideas.getByRole('button', { name: '看板', exact: true }).click();
+  await until(async () => (await client.callTool({ name: 'read_drawing', arguments: { id: flowId } })).structuredContent.document.elements.some(e => e.id.startsWith('kanban-')));
+  const merged = (await client.callTool({ name: 'read_drawing', arguments: { id: flowId } })).structuredContent.document.elements;
+  assert.ok(merged.some(e => e.id === 'start'), 'Inserting keeps the existing diagram');
+  assert.ok(Math.min(...merged.filter(e => e.id.startsWith('kanban-')).map(e => e.x)) > Math.max(...merged.filter(e => !e.id.startsWith('kanban-')).map(e => e.x + e.width)), 'Inserted beside existing content');
+  // With a selection, the prompts are about the selected elements.
+  await frame.locator('.excalidraw canvas.interactive').first().click({ position: { x: 5, y: 300 } });
+  await page.keyboard.press('Control+a');
+  await frame.getByRole('button', { name: '建议', exact: true }).click();
+  await ideas.getByRole('button', { name: '展开细节', exact: true }).click();
+  await page.waitForFunction(() => window.sentMessages?.length === 2);
+  assert.match((await page.evaluate(() => window.sentMessages[1].content[0].text)), /选中的元素（.*start/);
+  // The user's own templates: save this drawing from the menu, then find it in Ideas and the library.
+  await (await menuItem('存为我的模板')).click();
+  const templateForm = frame.getByRole('group', { name: '存为我的模板' });
+  await templateForm.getByLabel('模板名称').fill('我的流程');
+  await templateForm.getByLabel('什么时候用').fill('排查问题时');
+  await page.screenshot({ path: '.test-output/template-save-form.png' });
+  await templateForm.getByRole('button', { name: '保存模板' }).click();
+  await frame.getByText('已存为模板「我的流程」').waitFor();
+  const savedTemplates = (await client.callTool({ name: 'list_templates', arguments: {} })).structuredContent.templates;
+  assert.deepEqual(savedTemplates.map(t => [t.name, t.description]), [['我的流程', '排查问题时']]);
+  await frame.getByRole('button', { name: '建议', exact: true }).click();
+  await ideas.getByRole('button', { name: '我的流程' }).waitFor();
+  // Describing a new template asks the AI in the chat to draw a draft and save it.
+  await ideas.getByLabel('用一句话生成模板').fill('我们团队的发版流程');
+  await page.screenshot({ path: '.test-output/ideas-my-templates.png' });
+  await ideas.getByRole('button', { name: '发给 AI' }).click();
+  await page.waitForFunction(() => window.sentMessages?.length === 3);
+  assert.match(await page.evaluate(() => window.sentMessages[2].content[0].text), /发版流程.*save_template/);
+  await frame.getByRole('button', { name: '图纸列表', exact: true }).click();
+  await frame.getByRole('tab', { name: /^模板 7/ }).click();
+  await card('排查问题时').waitFor();
+  await page.screenshot({ path: '.test-output/library-my-templates.png' });
+  await card('我的流程').click();
+  await titleInput.waitFor({ timeout: 12000 });
+  assert.equal(await titleInput.inputValue(), '我的流程');
+  await frame.getByRole('button', { name: '图纸列表', exact: true }).click();
+  await frame.getByRole('tab', { name: /^模板/ }).click();
+  await card('我的流程').hover();
+  await frame.getByRole('button', { name: '删除模板「我的流程」' }).click();
+  await frame.getByRole('group', { name: '删除模板「我的流程」' }).getByRole('button', { name: '删除', exact: true }).click();
+  await frame.getByText('已删除模板「我的流程」').waitFor();
+  assert.equal((await client.callTool({ name: 'list_templates', arguments: {} })).structuredContent.templates.length, 0);
+  await frame.getByRole('tab', { name: /^图纸/ }).click();
+  await card('我的流程').click();
+  await titleInput.waitFor({ timeout: 12000 });
+  // A blank canvas offers templates on Excalidraw's welcome screen; picking one names the drawing.
+  await frame.getByRole('button', { name: '图纸列表', exact: true }).click();
+  await frame.getByRole('button', { name: '新建图纸', exact: true }).click();
+  await titleInput.waitFor({ timeout: 12000 });
+  await frame.locator('.welcome-screen-center').getByRole('button', { name: '思维导图' }).click();
+  await until(async () => (await client.callTool({ name: 'list_drawings', arguments: {} })).structuredContent.drawings.some(d => d.title === '思维导图'));
+  await page.screenshot({ path: '.test-output/template-welcome.png' });
+  await frame.getByRole('button', { name: '图纸列表', exact: true }).click();
+  await card('思维导图').waitFor();
   // English host locale: UI text and Excalidraw's own language follow it.
   await page.goto(`http://127.0.0.1:${http.address().port}/?locale=en-US`);
   await frame.getByRole('heading', { name: 'Drawings' }).waitFor();
@@ -323,7 +407,7 @@ try {
   await frame.getByRole('heading', { name: 'Drawings' }).waitFor();
   assert.deepEqual(errors, [], 'No uncaught browser errors');
   assert.deepEqual(external, [], 'No external network requests');
-  console.log('PASS: sandboxed official MCP App bridge, real Excalidraw pointer edit, autosave, Mermaid menu removal and Mermaid/plain-text paste, agent patch, reopen, 375px overflow, library thumbnails/search/copy/delete, English locale and language toggle, fixed-ID conversation card opening straight in the editor without writing, card autosave, live agent updates, no external requests');
+  console.log('PASS: sandboxed official MCP App bridge, real Excalidraw pointer edit, autosave, Mermaid menu removal and Mermaid/plain-text paste, agent patch, reopen, 375px overflow, library thumbnails/search/copy/delete, templates from the library and welcome screen, inserted templates, suggested chat follow-ups, saving/using/deleting own templates and describing one for the AI, English locale and language toggle, fixed-ID conversation card opening straight in the editor without writing, card autosave, live agent updates, no external requests');
 } finally {
   await browser?.close(); await client.close(); if (http) await new Promise(resolve => http.close(resolve));
   await rm(dir, { recursive: true, force: true });
