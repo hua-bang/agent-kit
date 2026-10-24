@@ -19,7 +19,7 @@ try {
   await connect();
   assert.equal(client.getServerVersion().name, 'local-excalidraw');
   assert.equal(client.getServerVersion().title, 'Agentic Excalidraw');
-  const tools = await client.listTools(); assert.equal(tools.tools.length, 16);
+  const tools = await client.listTools(); assert.equal(tools.tools.length, 17);
   assert.equal(tools.tools.find(t => t.name === 'open_library').title, 'Agentic Excalidraw');
   assert.equal(tools.tools.find(t => t.name === 'open_panel').title, 'Agentic Excalidraw');
   assert.equal(tools.tools.find(t => t.name === 'mention_drawings').title, 'Agentic Excalidraw');
@@ -86,14 +86,24 @@ try {
   assert.equal(reopened.document.plugin.revision, 2);
   const updated = await call('save_drawing', { id, expectedRevision: 2, scene: { elements: [{ ...box, x: 350 }] } });
   await call('patch_drawing', { id, expectedRevision: updated.document.plugin.revision, upsert: [{ ...box, id: 'new', x: 600 }] });
-  const latest = await call('read_drawing', { id });
-  assert.equal(latest.document.elements.find(e => e.id === 'box').x, 350);
-  assert.equal(latest.document.elements.length, 2);
+  const patched = await call('read_drawing', { id });
+  assert.equal(patched.document.elements.find(e => e.id === 'box').x, 350);
+  assert.equal(patched.document.elements.length, 2);
+  // Node-level edits keep connectors bound; the model reads the outline as text, not the raw scene.
+  await call('edit_drawing', { id, expectedRevision: patched.document.plugin.revision, operations: [
+    { op: 'connect', from: 'box', to: 'new', label: '调用' }, { op: 'move', ids: ['new'], dy: 200 }] });
+  const read = await client.callTool({ name: 'read_drawing', arguments: { id } });
+  const { outline, document } = JSON.parse(read.content[0].text);
+  assert.equal(document.elements, undefined, 'The raw scene stays out of the model text');
+  assert.deepEqual(outline.connectors, [{ id: 'box-new', from: 'box', to: 'new', label: '调用' }]);
+  assert.deepEqual(outline.issues, []);
+  const latest = read.structuredContent;
+  assert.equal(latest.document.elements.length, 4);
   assert.equal((await call('list_drawings')).drawings.length, 1);
   assert.equal((await call('delete_drawing', { id, expectedRevision: latest.document.plugin.revision })).deleted.id, id);
   assert.equal((await call('list_drawings')).drawings.length, 0);
   const item = { id: 'lib-1', status: 'unpublished', created: 1, elements: [box] };
   assert.equal((await call('save_library', { libraryItems: [item] })).saved, 1);
   assert.deepEqual((await call('read_library')).libraryItems, [item]);
-  console.log('PASS: real stdio handshake, resource, @-mention search and drawing resources, create, template presets, user templates, patch, conflict, process restart, user-position preservation, delete, personal library');
+  console.log('PASS: real stdio handshake, resource, @-mention search and drawing resources, create, template presets, user templates, patch, node-level edit and outline, conflict, process restart, user-position preservation, delete, personal library');
 } finally { await client?.close(); await rm(dir, { recursive: true, force: true }); }

@@ -9,6 +9,8 @@ import { TEMPLATE_IDS, relocateScene, templateName, templateScene, type Template
 import { sceneSchema, sceneOf, type CustomTemplate, type Drawing, type Scene, type TemplateSummary } from '../../shared/schemas';
 import type { useDrawing } from './useDrawing';
 import { Ideas } from './Ideas';
+import { boundsOf, contains, findFreeSpot } from './placement';
+import type { NoticeKind } from '../App';
 
 type Props = {
   drawing: ReturnType<typeof useDrawing>;
@@ -19,7 +21,7 @@ type Props = {
   busy: boolean;
   action(work: () => Promise<void>): void;
   onBack(): void;
-  onNotice(message: string): void;
+  onNotice(message: string, kind?: NoticeKind): void;
   toggleLocale(): void;
   messages: ReactNode;
   /** The user's own templates, to insert like presets. */
@@ -46,19 +48,31 @@ export function Editor({ drawing, doc, isLibrary, t, locale, theme, busy, action
   const [ideasOpen, setIdeasOpen] = useState(false);
   const closeIdeas = useCallback(() => setIdeasOpen(false), []);
   const canAsk = !!bridge.getHostCapabilities()?.message;
-  /** Add a starter diagram beside what is already drawn, as one undoable step, and bring it into view. */
+  /**
+   * Add a starter diagram where the user is looking, as one undoable step: centred in the visible
+   * area when that is free, else in the nearest free spot. The view moves only if it lands out of sight.
+   */
   function place(name: string, key: string, build: (at: { idPrefix: string; x: number; y: number }) => Scene) {
     const editor = api.current;
     if (!editor) return;
     setIdeasOpen(false);
     const existing = editor.getSceneElements();
-    const right = existing.length ? Math.max(...existing.map(e => e.x + e.width)) + 120 : 0;
-    const top = existing.length ? Math.min(...existing.map(e => e.y)) : 0;
-    const scene = build({ idPrefix: `${key}-${Date.now().toString(36)}-`, x: right, y: top });
+    const idPrefix = `${key}-${Date.now().toString(36)}-`;
+    const draft = build({ idPrefix, x: 0, y: 0 }).elements.map(boundsOf);
+    const size = draft.length ? { width: Math.max(...draft.map(r => r.x + r.width)) - Math.min(...draft.map(r => r.x)), height: Math.max(...draft.map(r => r.y + r.height)) - Math.min(...draft.map(r => r.y)) } : { width: 0, height: 0 };
+    const { scrollX, scrollY, zoom, width, height } = editor.getAppState();
+    const view = { x: -scrollX, y: -scrollY, width: width / zoom.value, height: height / zoom.value };
+    const at = findFreeSpot(existing.map(e => boundsOf(e as Parameters<typeof boundsOf>[0])), size, view);
+    const scene = build({ idPrefix, ...at });
     editor.addFiles(Object.values(scene.files) as never);
     const added = restore({ elements: scene.elements } as unknown as Parameters<typeof restore>[0], null, null, { repairBindings: true }).elements;
     editor.updateScene({ elements: [...editor.getSceneElementsIncludingDeleted(), ...added], captureUpdate: CaptureUpdateAction.IMMEDIATELY });
-    editor.scrollToContent(added, { fitToViewport: true, viewportZoomFactor: 0.9, animate: true });
+    if (!existing.length) editor.scrollToContent(added, { fitToViewport: true, viewportZoomFactor: 0.9, maxZoom: 1, animate: true });
+    else if (!contains(view, { ...at, ...size })) {
+      // Keep the zoom when the template fits the view; zoom out only as far as needed when it does not.
+      const fits = size.width <= view.width && size.height <= view.height;
+      editor.scrollToContent(added, fits ? { animate: true } : { fitToViewport: true, viewportZoomFactor: 0.9, maxZoom: zoom.value, animate: true });
+    }
     // A blank, unnamed drawing takes the template's name.
     if (!existing.length && drawing.title === t.untitled) drawing.rename(name);
     onNotice(t.templateInserted(name));
@@ -84,17 +98,18 @@ export function Editor({ drawing, doc, isLibrary, t, locale, theme, busy, action
   const generate = (description: string) => action(async () => {
     setIdeasOpen(false);
     const { isError } = await bridge.sendMessage({ role: 'user', content: [{ type: 'text', text: t.generatePrompt(description) }] });
-    onNotice(isError ? t.messageRejected : t.generateSent);
+    if (isError) onNotice(t.messageRejected, 'sticky'); else onNotice(t.generateSent, 'agent');
   });
-  /** Post a suggested follow-up to the chat as the user, once the latest edits are saved for the agent to read. */
-  function ask(prompt: PromptId) {
+  /** Post a follow-up about this drawing to the chat as the user, once the latest edits are saved for the agent to read. */
+  function ask(prompt: PromptId | { change: string }) {
     setIdeasOpen(false);
     action(async () => {
       await drawing.save();
       const source = drawing.current!;
-      const text = t.prompts[prompt].text({ title: drawing.title.trim() || source.plugin.title, id: source.plugin.id, ids: selectedIds });
+      const target = { title: drawing.title.trim() || source.plugin.title, id: source.plugin.id, ids: selectedIds };
+      const text = typeof prompt === 'string' ? t.prompts[prompt].text(target) : t.changePrompt(target, prompt.change);
       const { isError } = await bridge.sendMessage({ role: 'user', content: [{ type: 'text', text }] });
-      onNotice(isError ? t.messageRejected : t.messageSent);
+      if (isError) onNotice(t.messageRejected, 'sticky'); else onNotice(t.messageSent, 'agent');
     });
   }
   const tone = status === 'paused' || status === 'disconnected' ? 'error' : status === 'saving' || status === 'unsaved' ? 'pending' : status === 'saved' ? 'ok' : 'idle';
@@ -152,7 +167,7 @@ export function Editor({ drawing, doc, isLibrary, t, locale, theme, busy, action
     {!stuck && messages}
     <section id="main-content" className={`editor ${viewport.fitting ? 'is-fitting' : ''}`} aria-label={t.editorLabel}>
     {ideasOpen && <Ideas t={t} locale={locale} empty={empty} selected={selectedIds.length} canAsk={canAsk} busy={busy}
-      templates={templates} onInsert={insertTemplate} onInsertCustom={insertCustom} onAsk={ask} onGenerate={generate} onClose={closeIdeas} />}
+      templates={templates} onInsert={insertTemplate} onInsertCustom={insertCustom} onAsk={ask} onGenerate={generate} onDescribe={change => ask({ change })} onClose={closeIdeas} />}
     <Excalidraw key={viewport.editorKey}
       excalidrawAPI={value => { api.current = value; setExcalidrawAPI(value); viewport.mounted(value); }}
       // New shapes and text default to the hand-drawn style: sketchy lines and Virgil
@@ -164,7 +179,7 @@ export function Editor({ drawing, doc, isLibrary, t, locale, theme, busy, action
         // The sandbox blocks new windows; external links go through the host. Element links (#…) stay inside Excalidraw.
         if (!/^https?:\/\//i.test(element.link ?? '')) return;
         event.preventDefault();
-        void openExternal(element.link!).then(opened => { if (!opened) onNotice(t.linkUnavailable(element.link!)); });
+        void openExternal(element.link!).then(opened => { if (!opened) onNotice(t.linkUnavailable(element.link!), 'sticky'); });
       }}
       UIOptions={{ canvasActions: { loadScene: false, saveToActiveFile: false, export: false, saveAsImage: false, toggleTheme: false }, tools: { image: true } }}
       onChange={(elements, appState, files) => {

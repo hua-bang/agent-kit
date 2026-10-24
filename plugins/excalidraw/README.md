@@ -113,8 +113,9 @@ npm run test:stdio
 - `open_library`：独立图纸库资源，面向 Sidebar，支持缩略图、搜索、新建、复制、删除与进入详情。宿主不支持 Sidebar 时，显式调用此工具可能把图纸库放在对话中；插件不能强制宿主布局。
 - `create_drawing`：创建一张图，在对话中以固定 ID 的编辑器卡片打开。可传 `template`（`flowchart`、`architecture`、`mindmap`、`sequence`、`kanban`、`matrix`）和 `language`（`zh-CN`/`en`）从预设起步，与 `scene` 二选一。
 - `open_drawing`：在对话内直接以编辑器打开指定图纸（不区分预览态和编辑态），修改自动保存到同一张图。卡片中没有图纸列表或切换图纸入口。
-- `list_drawings` / `read_drawing`：只读取，不打开 UI。
-- `patch_drawing`：按稳定元素 ID 增量 upsert/remove，保留未修改元素与图片。
+- `list_drawings` / `read_drawing`：只读取，不打开 UI。`read_drawing` 给模型的文本是图纸概要（outline）：节点（ID、类型、文字、位置、尺寸、颜色）、连线（ID、起止节点或自由端点坐标、标签）、自由文字和问题提示（如没绑定到节点的箭头）；完整场景在 structured result 中，`elementIds` 可额外取回指定元素的完整 JSON。
+- `edit_drawing`：按节点语义编辑：`add_node`、`connect`、`reconnect`、`label`、`move`、`update`、`remove`，按顺序执行。服务端维护文字与形状、箭头与节点的双向绑定：移动节点时标签和相连箭头跟着走，删除节点时一并删掉它的标签和连线。复杂连线图优先用它。
+- `patch_drawing`：按稳定元素 ID 增量 upsert/remove，保留未修改元素与图片。写入后同样修正绑定：被移动或缩放的节点上的箭头重新对齐到边缘，被删节点的标签随之删除，`boundElements` 保持双向一致。
 - `save_drawing`：保存完整场景，必须携带最新 `expectedRevision`。
 - `delete_drawing`：携带最新 `expectedRevision` 删除一张图纸，文件移到 `trash/`，不再出现在列表中。
 - `list_templates` / `read_template`：列出内置预设和用户自己的模板（名称、适用场景），读取单个自定义模板的场景。
@@ -127,7 +128,8 @@ npm run test:stdio
 - 空白画布中央用 Excalidraw 欢迎页列出模板（开始画后自动消失）；选一个即插入，未命名的新图同时改名为模板名。
 - 编辑器页头的「建议」打开一个浮在画布右上角的面板，内容随画布变化：空白时「让 AI 帮我构思」；有内容时「整理布局 / 补全缺失部分 / 解释这张图 / 统一配色」；有选中元素时「展开细节 / 改写文字 / 只整理选中部分」（附带选中元素 ID）。下半部分可把任一模板插到现有内容右侧，一步可撤销。
 - 我的模板：编辑器菜单（☰）「存为我的模板」在页头下方展开内联表单（名称、什么时候用、是否换成占位符），先保存当前修改再存模板；不用 `<form>` 提交，因为没有 `allow-forms` 的宿主沙箱会丢弃提交事件。自定义模板卡片右上角可删除（卡片内确认）；「建议」面板和空白画布欢迎页（前三个）也列出自定义模板，插入时整体平移并给全部元素与引用加前缀。
-- 一句话生成模板：图纸库「模板」Tab 和「建议」面板里输入描述后，经 `ui/message` 发到对话，请 Agent 先用 `create_drawing` 画草稿、确认后再 `save_template`。插件本身不调用模型；宿主不支持 `message` 时不显示入口。
+- 一句话生成模板：图纸库「模板」Tab 和空白画布的「建议」面板里输入描述后，经 `ui/message` 发到对话，请 Agent 先用 `create_drawing` 画草稿、确认后再 `save_template`。插件本身不调用模型；宿主不支持 `message` 时不显示入口。画布上已有内容时，「建议」面板里的输入框换成「描述想怎么改」，把修改要求（连同图纸 ID 和选中元素）发给 Agent 改当前这张图。
+- 插入模板：放在当前视野中央；那里已有内容时，放在离视野中心最近的空位，不覆盖已有元素。缩放保持不变，只有落在视野外时才滚动过去。
 - AI 建议先保存当前修改，再通过 MCP Apps `ui/message`（`sendMessage`）以用户身份把一句带图纸 ID 的话发到对话里，Agent 读取最新图纸后继续。宿主未声明 `message` 能力时不显示这些按钮，只提示在对话中描述；尚未在 Codex/OpenAI 桌面端验证该能力。
 
 删除图纸：在图纸库里把鼠标移到卡片上（触屏设备常显），点右上角垃圾桶图标，再在卡片内确认「删除」；也可以让 Agent 删除。确认采用卡片内联提示，因为宿主沙箱 iframe 可能禁止 `window.confirm`。删除不是彻底销毁：图纸文件移到 `~/.excalidraw-plugin/trash/<uuid>.excalidraw`，最近五个旧版本仍在 `backups/<uuid>/`；把文件移回 `drawings/` 即可恢复，暂无恢复 UI，也不自动清空 trash。已在其他卡片中打开的同一张图，删除后再保存会报“Drawing not found”，不会重新创建。

@@ -3,6 +3,7 @@ import { registerAppTool } from '@modelcontextprotocol/ext-apps/server';
 import type { DrawingStore } from '../../storage/drawings.js';
 import { z } from 'zod';
 import { idSchema, sceneSchema, titleSchema } from '../../shared/schemas.js';
+import { outlineScene } from '../../shared/graph.js';
 import { TEMPLATE_IDS, templateScene, type TemplateId } from '../../shared/templates.js';
 import { config } from '../config.js';
 import { LIBRARY_URI, PANEL_URI, UI_URI, readonly, writable } from '../constants.js';
@@ -32,7 +33,7 @@ export function registerViewTools(server: McpServer, store: DrawingStore) {
   }, ({ id }) => guarded(async () => ({ document: await store.read(id) })));
   registerAppTool(server, 'create_drawing', {
     description: 'Create a local drawing and show it as a fixed-ID card that opens straight in the editor. Optional scene contains Excalidraw elements; '
-      + `or pass template (a built-in ${TEMPLATE_IDS.join(', ')} in language zh-CN or en, or the UUID of one of the user's own templates from list_templates) to start from an editable starter diagram, then read and patch it to fit; omit both for a blank canvas.`,
+      + `or pass template (a built-in ${TEMPLATE_IDS.join(', ')} in language zh-CN or en, or the UUID of one of the user's own templates from list_templates) to start from an editable starter diagram (the result outlines its nodes), then edit_drawing it to fit; omit both for a blank canvas.`,
     inputSchema: {
       title: titleSchema, scene: sceneSchema.optional(),
       template: z.union([z.enum(TEMPLATE_IDS), idSchema]).optional(), language: z.enum(['zh-CN', 'en']).default('en'),
@@ -42,6 +43,8 @@ export function registerViewTools(server: McpServer, store: DrawingStore) {
     const fromTemplate = !template ? scene
       : (TEMPLATE_IDS as readonly string[]).includes(template) ? templateScene(template as TemplateId, { locale: language })
       : (await store.readTemplate(template)).scene;
-    return { document: await store.create(title, fromTemplate) };
+    const document = await store.create(title, fromTemplate);
+    // From a template the next step is editing it, so give the model its node IDs and labels right away.
+    return template ? { document, outline: outlineScene(document) } : { document };
   }));
 }

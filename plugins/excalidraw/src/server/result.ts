@@ -2,10 +2,10 @@ import { z } from 'zod';
 import { ConflictError } from '../storage/drawings.js';
 import type { Drawing } from '../shared/schemas.js';
 
-// Text for the model stays small (document metadata only); the full payload rides in structuredContent.
+// Text for the model stays small: document metadata plus any outline, never the raw scene; the full payload rides in structuredContent.
 export const result = (data: Record<string, unknown>) => ({
   content: [{ type: 'text' as const, text: JSON.stringify('document' in data
-    ? { document: (data.document as Drawing).plugin } : data) }], structuredContent: data,
+    ? { ...data, document: (data.document as Drawing).plugin } : data) }], structuredContent: data,
 });
 /** Run a tool body and turn failures into readable tool errors; conflicts carry the current revision. */
 export async function guarded(fn: () => Promise<Record<string, unknown>>) {

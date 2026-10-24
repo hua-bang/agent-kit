@@ -13,6 +13,14 @@ import { IconCanvas } from './ui/icons';
 import type { Drawing, TemplateSummary } from '../shared/schemas';
 
 /**
+ * How long a notice stays. `info` fades after a few seconds; `agent` ("sent to the chat")
+ * closes when the agent's change to the drawing arrives, or after a longer wait;
+ * `sticky` carries something to act on (a rejected message, a link to copy) and waits for ×.
+ */
+export type NoticeKind = 'info' | 'agent' | 'sticky';
+const NOTICE_MS: Record<Exclude<NoticeKind, 'sticky'>, number> = { info: 6000, agent: 20000 };
+
+/**
  * Composes the surface. The library (Sidebar, conversation panel) lists drawings and
  * enters the editor; a conversation card shows one drawing in the editor directly.
  */
@@ -22,7 +30,13 @@ export function App() {
   const surface = document.querySelector('meta[name="excalidraw-surface"]')?.getAttribute('content');
   const isPanel = surface === 'panel';
   const isLibrary = surface === 'library' || isPanel;
-  const [notice, setNotice] = useState('');
+  const [notice, setNoticeState] = useState<{ text: string; kind: NoticeKind } | null>(null);
+  const setNotice = (text: string, kind: NoticeKind = 'info') => setNoticeState(text ? { text, kind } : null);
+  useEffect(() => {
+    if (!notice || notice.kind === 'sticky') return;
+    const timer = setTimeout(() => setNoticeState(null), NOTICE_MS[notice.kind]);
+    return () => clearTimeout(timer);
+  }, [notice]);
   const [query, setQuery] = useState('');
   const [busy, setBusy] = useState(false);
   // Most cards connect and load within a moment; only explain the wait if it actually takes a while.
@@ -53,12 +67,16 @@ export function App() {
       // Element links (Excalidraw's link popup) go through onLinkOpen in the editor instead.
       if (!anchor || anchor.closest('.excalidraw-hyperlinkContainer') || !/^https?:/i.test(anchor.href) || new URL(anchor.href).origin === location.origin) return;
       event.preventDefault();
-      void openExternal(anchor.href).then(opened => { if (!opened) setNotice(t.linkUnavailable(anchor.href)); });
+      void openExternal(anchor.href).then(opened => { if (!opened) setNotice(t.linkUnavailable(anchor.href), 'sticky'); });
     };
     document.addEventListener('click', onClick, true);
     return () => document.removeEventListener('click', onClick, true);
   }, [t]);
-  const drawing = useDrawing({ connected: host.connected, isLibrary, t, onLoaded: isPanel ? session.remember : undefined });
+  const drawing = useDrawing({ connected: host.connected, isLibrary, t, onLoaded(id) {
+    if (isPanel) session.remember(id);
+    // The agent's edit has landed, so "sent to the chat" is done.
+    setNoticeState(current => current?.kind === 'agent' ? null : current);
+  } });
   const { doc, error } = drawing;
   const library = useLibrary(host.connected, isLibrary && !doc, message => drawing.setError(message));
   const templates = useTemplates(host.connected);
@@ -74,7 +92,7 @@ export function App() {
   const open = async (tool: string, args: Record<string, unknown>) => drawing.load((await callTool<{ document: Drawing }>(tool, args)).document);
   const messages = <>
     {error && <div className="banner error" role="alert"><span>{error}</span>{!doc && host.connected && isLibrary && <button className="tool" onClick={() => void library.refresh()}>{t.retry}</button>}</div>}
-    {notice && <div className="banner notice" role="status"><span>{notice}</span><button type="button" className="ghost icon-button dismiss" aria-label={t.dismiss} title={t.dismiss} onClick={() => setNotice('')}>×</button></div>}
+    {notice && <div className="banner notice" role="status"><span>{notice.text}</span><button type="button" className="ghost icon-button dismiss" aria-label={t.dismiss} title={t.dismiss} onClick={() => setNotice('')}>×</button></div>}
   </>;
   return <main lang={locale} className={`app ${isLibrary ? 'library-surface' : 'drawing-surface'} ${doc ? 'is-editing' : ''}`}>
     <a className="skip-link" href="#main-content">{t.skipLink}</a>
@@ -95,7 +113,7 @@ export function App() {
       })}
       onGenerate={(description, sent) => void action(async () => {
         const { isError } = await bridge.sendMessage({ role: 'user', content: [{ type: 'text', text: t.generatePrompt(description) }] });
-        setNotice(isError ? t.messageRejected : t.generateSent);
+        if (isError) setNotice(t.messageRejected, 'sticky'); else setNotice(t.generateSent, 'agent');
         if (!isError) sent();
       })}
       onCreate={(title, created, template) => void action(async () => { await open('create_drawing', { title, ...(template ? { template, language: locale } : {}) }); created(); setNotice(''); })}

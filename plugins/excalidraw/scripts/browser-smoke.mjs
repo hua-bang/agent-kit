@@ -333,13 +333,15 @@ try {
   assert.equal(sent.length, 1);
   assert.equal(sent[0].role, 'user');
   assert.match(sent[0].content[0].text, new RegExp(`整理.*${flowId}`));
-  // Inserting a template adds it beside the drawing, with fresh IDs, and autosaves.
+  // Inserting a template adds it near the view, clear of what is drawn, with fresh IDs, and autosaves.
   await frame.getByRole('button', { name: '建议', exact: true }).click();
   await ideas.getByRole('button', { name: '看板', exact: true }).click();
   await until(async () => (await client.callTool({ name: 'read_drawing', arguments: { id: flowId } })).structuredContent.document.elements.some(e => e.id.startsWith('kanban-')));
   const merged = (await client.callTool({ name: 'read_drawing', arguments: { id: flowId } })).structuredContent.document.elements;
   assert.ok(merged.some(e => e.id === 'start'), 'Inserting keeps the existing diagram');
-  assert.ok(Math.min(...merged.filter(e => e.id.startsWith('kanban-')).map(e => e.x)) > Math.max(...merged.filter(e => !e.id.startsWith('kanban-')).map(e => e.x + e.width)), 'Inserted beside existing content');
+  const box = list => ({ x: Math.min(...list.map(e => e.x)), y: Math.min(...list.map(e => e.y)), r: Math.max(...list.map(e => e.x + e.width)), b: Math.max(...list.map(e => e.y + e.height)) });
+  const inserted = box(merged.filter(e => e.id.startsWith('kanban-')));
+  assert.ok(merged.filter(e => !e.id.startsWith('kanban-') && !e.isDeleted).every(e => e.x >= inserted.r || e.x + e.width <= inserted.x || e.y >= inserted.b || e.y + e.height <= inserted.y), 'Inserted clear of existing content');
   // With a selection, the prompts are about the selected elements.
   await frame.locator('.excalidraw canvas.interactive').first().click({ position: { x: 5, y: 300 } });
   await page.keyboard.press('Control+a');
@@ -359,12 +361,12 @@ try {
   assert.deepEqual(savedTemplates.map(t => [t.name, t.description]), [['我的流程', '排查问题时']]);
   await frame.getByRole('button', { name: '建议', exact: true }).click();
   await ideas.getByRole('button', { name: '我的流程' }).waitFor();
-  // Describing a new template asks the AI in the chat to draw a draft and save it.
-  await ideas.getByLabel('用一句话生成模板').fill('我们团队的发版流程');
+  // On a drawn canvas the free-text box asks the AI to change this drawing (new templates are made from the library or a blank canvas).
+  await ideas.getByLabel('描述想怎么改').fill('加上缓存未命中的分支');
   await page.screenshot({ path: '.test-output/ideas-my-templates.png' });
   await ideas.getByRole('button', { name: '发给 AI' }).click();
   await page.waitForFunction(() => window.sentMessages?.length === 3);
-  assert.match(await page.evaluate(() => window.sentMessages[2].content[0].text), /发版流程.*save_template/);
+  assert.match(await page.evaluate(() => window.sentMessages[2].content[0].text), new RegExp(`id ${flowId}.*缓存未命中`));
   await frame.getByRole('button', { name: '图纸列表', exact: true }).click();
   await frame.getByRole('tab', { name: /^模板 7/ }).click();
   await card('排查问题时').waitFor();
