@@ -57,7 +57,8 @@ Tool names may be prefixed by the host's server name. This portable Agent Plugin
 ## The user's own templates
 
 - When the user asks to keep a diagram as a template, call `save_template` with `drawingId` (its latest saved scene), a short `name`, and a `description` of when to use it; set `placeholders: true` only if they want text replaced by numbered placeholders.
-- The editor's "用一句话生成模板 / Describe a template" posts a request like “Create a reusable drawing template from this description: …”. Draw a draft with `create_drawing` (title starting with “模板草稿：” / “Template draft: ”), keep it generic but concrete, ask whether to adjust, and call `save_template` with that drawing only after the user confirms. Do not save templates on your own initiative.
+- On a canvas that already has content, the Ideas box "描述想怎么改 / Describe a change" posts a change request naming the drawing ID (and selected element IDs, if any): read the latest drawing and change only what it asks.
+- The library's or a blank canvas's "用一句话生成模板 / Describe a template" posts a request like “Create a reusable drawing template from this description: …”. Draw a draft with `create_drawing` (title starting with “模板草稿：” / “Template draft: ”), keep it generic but concrete, ask whether to adjust, and call `save_template` with that drawing only after the user confirms. Do not save templates on your own initiative.
 - Delete a template with `delete_template` only when the user explicitly asks; it moves to the local `trash/` folder.
 
 Data lives under `~/.excalidraw-plugin/` by default, not in the source repository.

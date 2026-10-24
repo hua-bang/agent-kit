@@ -361,12 +361,12 @@ try {
   assert.deepEqual(savedTemplates.map(t => [t.name, t.description]), [['我的流程', '排查问题时']]);
   await frame.getByRole('button', { name: '建议', exact: true }).click();
   await ideas.getByRole('button', { name: '我的流程' }).waitFor();
-  // Describing a new template asks the AI in the chat to draw a draft and save it.
-  await ideas.getByLabel('用一句话生成模板').fill('我们团队的发版流程');
+  // On a drawn canvas the free-text box asks the AI to change this drawing (new templates are made from the library or a blank canvas).
+  await ideas.getByLabel('描述想怎么改').fill('加上缓存未命中的分支');
   await page.screenshot({ path: '.test-output/ideas-my-templates.png' });
   await ideas.getByRole('button', { name: '发给 AI' }).click();
   await page.waitForFunction(() => window.sentMessages?.length === 3);
-  assert.match(await page.evaluate(() => window.sentMessages[2].content[0].text), /发版流程.*save_template/);
+  assert.match(await page.evaluate(() => window.sentMessages[2].content[0].text), new RegExp(`id ${flowId}.*缓存未命中`));
   await frame.getByRole('button', { name: '图纸列表', exact: true }).click();
   await frame.getByRole('tab', { name: /^模板 7/ }).click();
   await card('排查问题时').waitFor();
