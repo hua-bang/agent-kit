@@ -113,8 +113,9 @@ npm run test:stdio
 - `open_library`：独立图纸库资源，面向 Sidebar，支持缩略图、搜索、新建、复制、删除与进入详情。宿主不支持 Sidebar 时，显式调用此工具可能把图纸库放在对话中；插件不能强制宿主布局。
 - `create_drawing`：创建一张图，在对话中以固定 ID 的编辑器卡片打开。可传 `template`（`flowchart`、`architecture`、`mindmap`、`sequence`、`kanban`、`matrix`）和 `language`（`zh-CN`/`en`）从预设起步，与 `scene` 二选一。
 - `open_drawing`：在对话内直接以编辑器打开指定图纸（不区分预览态和编辑态），修改自动保存到同一张图。卡片中没有图纸列表或切换图纸入口。
-- `list_drawings` / `read_drawing`：只读取，不打开 UI。
-- `patch_drawing`：按稳定元素 ID 增量 upsert/remove，保留未修改元素与图片。
+- `list_drawings` / `read_drawing`：只读取，不打开 UI。`read_drawing` 给模型的文本是图纸概要（outline）：节点（ID、类型、文字、位置、尺寸、颜色）、连线（ID、起止节点或自由端点坐标、标签）、自由文字和问题提示（如没绑定到节点的箭头）；完整场景在 structured result 中，`elementIds` 可额外取回指定元素的完整 JSON。
+- `edit_drawing`：按节点语义编辑：`add_node`、`connect`、`reconnect`、`label`、`move`、`update`、`remove`，按顺序执行。服务端维护文字与形状、箭头与节点的双向绑定：移动节点时标签和相连箭头跟着走，删除节点时一并删掉它的标签和连线。复杂连线图优先用它。
+- `patch_drawing`：按稳定元素 ID 增量 upsert/remove，保留未修改元素与图片。写入后同样修正绑定：被移动或缩放的节点上的箭头重新对齐到边缘，被删节点的标签随之删除，`boundElements` 保持双向一致。
 - `save_drawing`：保存完整场景，必须携带最新 `expectedRevision`。
 - `delete_drawing`：携带最新 `expectedRevision` 删除一张图纸，文件移到 `trash/`，不再出现在列表中。
 - `list_templates` / `read_template`：列出内置预设和用户自己的模板（名称、适用场景），读取单个自定义模板的场景。

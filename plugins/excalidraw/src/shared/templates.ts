@@ -1,4 +1,5 @@
 import { sceneSchema, type Scene } from './schemas.js';
+import { GAP, TONES, edge, elementDefaults, measure, type Tone } from './elements.js';
 
 /**
  * Starter diagrams ("presets"). Pure data, shared by the server (`create_drawing` with a
@@ -12,14 +13,7 @@ export type TemplateLocale = 'zh-CN' | 'en';
 
 type Shape = 'rectangle' | 'ellipse' | 'diamond';
 type Box = { id: string; type: Shape; x: number; y: number; width: number; height: number };
-type Tone = keyof typeof TONES;
 type Options = { locale?: TemplateLocale; idPrefix?: string; x?: number; y?: number };
-
-// Excalidraw's own palette (stroke, light fill); the editor inverts these in dark mode.
-const TONES = {
-  blue: ['#1971c2', '#a5d8ff'], green: ['#2f9e44', '#b2f2bb'], yellow: ['#f08c00', '#ffec99'],
-  red: ['#e03131', '#ffc9c9'], violet: ['#6741d9', '#d0bfff'], gray: ['#495057', '#e9ecef'],
-} as const;
 
 const zh = {
   flowchart: { name: '流程图', start: '开始', step: '处理请求', check: '是否通过？', fix: '修正后重试', done: '完成', yes: '是', no: '否' },
@@ -132,12 +126,7 @@ class Builder {
 
   private add(element: Record<string, unknown>) {
     const id = String(element.id);
-    const full = {
-      angle: 0, strokeColor: TONES.gray[0], backgroundColor: 'transparent', fillStyle: 'solid', strokeWidth: 2,
-      strokeStyle: 'solid', roughness: 1, opacity: 100, groupIds: [], frameId: null, roundness: null,
-      seed: seed(id), version: 1, versionNonce: seed(`${id}:nonce`), isDeleted: false, boundElements: [],
-      updated: 1, link: null, locked: false, ...element,
-    };
+    const full = { ...elementDefaults(id), ...element };
     this.elements.push(full); this.byId.set(id, full);
     return full;
   }
@@ -201,36 +190,6 @@ class Builder {
       points: [[0, 0], [w, h]], lastCommittedPoint: null, startBinding: null, endBinding: null,
       startArrowhead: null, endArrowhead: 'arrow', elbowed: false, strokeColor: TONES.gray[0] });
   }
-}
-
-const GAP = 8;
-
-/** Where the line between two shape centres leaves `from`, plus the binding gap. */
-function edge(from: Box, to: Box): [number, number] {
-  const cx = from.x + from.width / 2, cy = from.y + from.height / 2;
-  const dx = to.x + to.width / 2 - cx, dy = to.y + to.height / 2 - cy;
-  const rx = from.width / 2, ry = from.height / 2;
-  const t = from.type === 'ellipse' ? 1 / Math.hypot(dx / rx, dy / ry)
-    : from.type === 'diamond' ? 1 / (Math.abs(dx) / rx + Math.abs(dy) / ry)
-    : Math.min(dx ? rx / Math.abs(dx) : Infinity, dy ? ry / Math.abs(dy) : Infinity);
-  const length = Math.hypot(dx, dy) || 1;
-  return [round(cx + dx * t + dx / length * GAP), round(cy + dy * t + dy / length * GAP)];
-}
-
-/** Generous text box: CJK glyphs are about one em wide, Latin about 0.6 em (the skill's sizing rule). */
-function measure(text: string, fontSize: number) {
-  const lines = text.split('\n');
-  const width = Math.max(...lines.map(line => [...line].reduce((sum, ch) => sum + (/[⺀-￿]/.test(ch) ? 1 : 0.6), 0)));
-  return { width: Math.ceil(width * fontSize) + 4, height: Math.ceil(lines.length * fontSize * 1.25) };
-}
-
-const round = (value: number) => Math.round(value * 100) / 100;
-
-/** Stable per-element seed, so a template always renders the same hand-drawn strokes. */
-function seed(text: string) {
-  let hash = 2166136261;
-  for (const ch of text) hash = Math.imul(hash ^ ch.charCodeAt(0), 16777619);
-  return (hash >>> 0) % 2_000_000_000 + 1;
 }
 
 type Loose = Record<string, unknown>;
