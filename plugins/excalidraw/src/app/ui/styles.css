@@ -185,21 +185,11 @@ html, body, #root { height: 100%; }
 .search input { width: 100%; padding-left: 34px; }
 .composer { display: flex; gap: 8px; flex: 0 1 340px; min-width: 0; }
 .composer input { flex: 1; width: 100%; }
-.templates { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: -6px 0 16px; }
-.templates .meta { margin-right: 2px; }
-.templates button { height: 32px; padding: 0 10px; font-size: 13px; }
-.template-tabs { display: inline-flex; gap: 2px; padding: 2px; border-radius: var(--radius); background: var(--button); }
-.template-tabs button { height: 28px; padding: 0 10px; color: var(--muted); }
-.template-tabs button.is-active { background: var(--island); color: var(--ink); font-weight: 600; box-shadow: var(--shadow-island); }
-.template-chip { display: inline-flex; gap: 2px; }
-.template-chip > button:first-child { border-radius: var(--radius) 0 0 var(--radius); }
-.template-chip > .icon-button { width: 30px; border-radius: 0 var(--radius) var(--radius) 0; color: var(--muted); }
-@media (hover: hover) { .template-chip > .icon-button:not(:disabled):hover { color: var(--danger); } }
-.template-confirm { display: inline-flex; align-items: center; gap: 6px; padding: 0 4px 0 10px; border-radius: var(--radius); background: var(--island); box-shadow: var(--shadow-island); font-size: 13px; }
-.templates .generate { margin-left: auto; border: 1px dashed var(--primary); background: transparent; color: var(--primary-text); font-weight: 600; }
-.templates .generate.is-open { background: var(--primary-light); }
-.generate-row { display: flex; gap: 8px; margin: -8px 0 16px; }
-.generate-row input { flex: 1; }
+.view-tabs { display: inline-flex; gap: 2px; margin-right: auto; padding: 3px; border-radius: 10px; background: var(--button); }
+.view-tabs button { height: 32px; padding: 0 12px; gap: 6px; color: var(--muted); font-size: 15px; }
+.view-tabs button.is-active { background: var(--island); color: var(--ink); font-weight: 600; box-shadow: var(--shadow-island); }
+.view-tabs .count { margin: 0; }
+.template-empty { margin: 0 0 20px; }
 .group-title { margin: 4px 0 10px; font-size: 13px; font-weight: 600; color: var(--muted); }
 .drawing-grid + .group-title { margin-top: 24px; }
 .drawing-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px; }

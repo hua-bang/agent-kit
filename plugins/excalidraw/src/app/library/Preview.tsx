@@ -3,13 +3,19 @@ import { exportToBlob, restore } from '@excalidraw/excalidraw';
 import { callTool } from '../host/bridge';
 import type { Messages, PreviewState } from '../ui/i18n';
 import { cachedThumbnail, thumbnail, thumbnailKey } from './thumbnails';
-import { sceneOf, type Drawing, type DrawingSummary } from '../../shared/schemas';
+import { sceneOf, type Drawing, type DrawingSummary, type Scene } from '../../shared/schemas';
 
 /** Library thumbnail, rasterized with the real SDK; never inject drawing text as HTML or SVG. */
 export function Preview({ summary, dark = false, t }: { summary: DrawingSummary; dark?: boolean; t: Messages }) {
+  return <ScenePreview cacheId={summary.id} revision={summary.revision} dark={dark} t={t} alt={t.previewAlt(summary.title)}
+    load={async () => sceneOf((await callTool<{ document: Drawing }>('read_drawing', { id: summary.id })).document)} />;
+}
+
+/** Thumbnail of any scene (a drawing, a template), cached per id, revision and theme. */
+export function ScenePreview({ cacheId, revision, dark = false, t, alt, load }: { cacheId: string; revision: number; dark?: boolean; t: Messages; alt: string; load(): Promise<Scene> }) {
   const container = useRef<HTMLSpanElement>(null);
   const [visible, setVisible] = useState(false);
-  const key = thumbnailKey(summary.id, summary.revision, dark);
+  const key = thumbnailKey(cacheId, revision, dark);
   const [image, setImage] = useState(() => cachedThumbnail(key) ?? '');
   const [state, setState] = useState<PreviewState>(() => cachedThumbnail(key) === '' ? 'empty' : 'loading');
   useEffect(() => {
@@ -25,9 +31,9 @@ export function Preview({ summary, dark = false, t }: { summary: DrawingSummary;
     let cancelled = false;
     // A newer revision keeps showing the previous image until its own is ready.
     void thumbnail(key, async () => {
-      const source = (await callTool<{ document: Drawing }>('read_drawing', { id: summary.id })).document;
+      const source = await load();
       if (!source.elements.some(element => !element.isDeleted)) return '';
-      const restored = restore(sceneOf(source) as unknown as Parameters<typeof restore>[0], null, null);
+      const restored = restore(source as unknown as Parameters<typeof restore>[0], null, null);
       // Default white paper is drawn by the card itself so it can follow the host theme.
       const background = String(source.appState.viewBackgroundColor ?? '#ffffff').toLowerCase();
       const exportBackground = !['#ffffff', '#fff', 'white', 'transparent'].includes(background);
@@ -47,6 +53,6 @@ export function Preview({ summary, dark = false, t }: { summary: DrawingSummary;
     return () => { cancelled = true; };
   }, [visible, key]);
   return <span className="scene-preview" ref={container}>
-    {image ? <img src={image} alt={t.previewAlt(summary.title)} /> : <span className="preview-placeholder">{t.preview[state]}</span>}
+    {image ? <img src={image} alt={alt} /> : <span className="preview-placeholder">{t.preview[state]}</span>}
   </span>;
 }

@@ -309,7 +309,11 @@ try {
   await page.screenshot({ path: '.test-output/qa-library-mobile.png' });
   // Presets: a library template creates a ready, bound diagram named after it.
   await page.setViewportSize({ width: 1200, height: 950 });
-  await frame.getByRole('group', { name: '从模板新建' }).getByRole('button', { name: '流程图', exact: true }).click();
+  // Templates live in their own tab beside the drawings, as cards with thumbnails.
+  await frame.getByRole('tab', { name: /^模板/ }).click();
+  await frame.locator('.drawing img').first().waitFor();
+  await page.screenshot({ path: '.test-output/library-templates-tab.png' });
+  await card('流程图').click();
   await titleInput.waitFor({ timeout: 12000 });
   assert.equal(await titleInput.inputValue(), '流程图');
   const flowId = (await client.callTool({ name: 'list_drawings', arguments: {} })).structuredContent.drawings.find(d => d.title === '流程图').id;
@@ -362,18 +366,20 @@ try {
   await page.waitForFunction(() => window.sentMessages?.length === 3);
   assert.match(await page.evaluate(() => window.sentMessages[2].content[0].text), /发版流程.*save_template/);
   await frame.getByRole('button', { name: '图纸列表', exact: true }).click();
-  await frame.getByRole('tab', { name: /我的模板 1/ }).click();
+  await frame.getByRole('tab', { name: /^模板 7/ }).click();
+  await card('排查问题时').waitFor();
   await page.screenshot({ path: '.test-output/library-my-templates.png' });
-  await frame.getByRole('button', { name: '我的流程', exact: true }).click();
+  await card('我的流程').click();
   await titleInput.waitFor({ timeout: 12000 });
   assert.equal(await titleInput.inputValue(), '我的流程');
   await frame.getByRole('button', { name: '图纸列表', exact: true }).click();
-  await frame.getByRole('tab', { name: /我的模板 1/ }).click();
+  await frame.getByRole('tab', { name: /^模板/ }).click();
+  await card('我的流程').hover();
   await frame.getByRole('button', { name: '删除模板「我的流程」' }).click();
   await frame.getByRole('group', { name: '删除模板「我的流程」' }).getByRole('button', { name: '删除', exact: true }).click();
   await frame.getByText('已删除模板「我的流程」').waitFor();
   assert.equal((await client.callTool({ name: 'list_templates', arguments: {} })).structuredContent.templates.length, 0);
-  await frame.getByRole('tab', { name: '预设' }).click();
+  await frame.getByRole('tab', { name: /^图纸/ }).click();
   await card('我的流程').click();
   await titleInput.waitFor({ timeout: 12000 });
   // A blank canvas offers templates on Excalidraw's welcome screen; picking one names the drawing.

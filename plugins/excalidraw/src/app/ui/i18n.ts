@@ -1,3 +1,4 @@
+import type { TemplateId } from '../../shared/templates';
 // UI strings. A language the user picked wins, then the host's BCP 47 `locale`, then the browser language.
 // Chinese tags get zh-CN, everything else English. Text sent to the model stays English.
 export type Locale = 'zh-CN' | 'en';
@@ -83,8 +84,13 @@ const zh = {
   messageRejected: '宿主没有接受这条消息，可以直接在对话里描述想怎么改。',
   templateInserted: (name: string) => `已插入「${name}」，按 Ctrl+Z 可撤销。`,
   presets: '预设',
+  drawingsTab: '图纸',
+  templatesTab: '模板',
+  browseTemplates: '从模板开始',
+  myTemplatesEmptyNoAi: '还没有自己的模板。在编辑器菜单（☰）里可以把图存为模板。',
+  presetHints: { flowchart: '步骤、判断与回环', architecture: '客户端、服务层、数据层', mindmap: '一个主题，四个分支', sequence: '参与者之间的消息往来', kanban: '待办、进行中、已完成', matrix: '重要 × 紧急四象限' } satisfies Record<TemplateId, string>,
   myTemplates: '我的模板',
-  myTemplatesEmpty: '还没有自己的模板。在编辑器菜单（☰）里把图存为模板，或用一句话让 AI 生成。',
+  myTemplatesEmpty: '还没有自己的模板。在上方用一句话让 AI 生成，或在编辑器菜单（☰）里把图存为模板。',
   generateTemplate: '用一句话生成模板',
   generatePlaceholder: '描述你常画的图，例如：我们团队的发版流程',
   generateSend: '发给 AI',
@@ -190,8 +196,13 @@ const en: Messages = {
   messageRejected: 'The host did not accept the message; describe the change in the chat instead.',
   templateInserted: name => `Inserted “${name}”. Press Ctrl+Z to undo.`,
   presets: 'Presets',
+  drawingsTab: 'Drawings',
+  templatesTab: 'Templates',
+  browseTemplates: 'Start from a template',
+  myTemplatesEmptyNoAi: 'No templates of your own yet. Save a drawing as a template from the editor menu (☰).',
+  presetHints: { flowchart: 'Steps, a decision and a loop', architecture: 'Clients, services, data', mindmap: 'One topic, four branches', sequence: 'Messages between participants', kanban: 'To do, doing, done', matrix: 'Importance × urgency' },
   myTemplates: 'My templates',
-  myTemplatesEmpty: 'No templates of your own yet. Save a drawing as a template from the editor menu (☰), or describe one for the AI to draw.',
+  myTemplatesEmpty: 'No templates of your own yet. Describe one above for the AI to draw, or save a drawing as a template from the editor menu (☰).',
   generateTemplate: 'Describe a template',
   generatePlaceholder: 'Describe a diagram you draw often, e.g. our release process',
   generateSend: 'Send to AI',
