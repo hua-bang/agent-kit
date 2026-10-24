@@ -9,6 +9,7 @@ import { TEMPLATE_IDS, relocateScene, templateName, templateScene, type Template
 import { sceneSchema, sceneOf, type CustomTemplate, type Drawing, type Scene, type TemplateSummary } from '../../shared/schemas';
 import type { useDrawing } from './useDrawing';
 import { Ideas } from './Ideas';
+import type { NoticeKind } from '../App';
 
 type Props = {
   drawing: ReturnType<typeof useDrawing>;
@@ -19,7 +20,7 @@ type Props = {
   busy: boolean;
   action(work: () => Promise<void>): void;
   onBack(): void;
-  onNotice(message: string): void;
+  onNotice(message: string, kind?: NoticeKind): void;
   toggleLocale(): void;
   messages: ReactNode;
   /** The user's own templates, to insert like presets. */
@@ -84,7 +85,7 @@ export function Editor({ drawing, doc, isLibrary, t, locale, theme, busy, action
   const generate = (description: string) => action(async () => {
     setIdeasOpen(false);
     const { isError } = await bridge.sendMessage({ role: 'user', content: [{ type: 'text', text: t.generatePrompt(description) }] });
-    onNotice(isError ? t.messageRejected : t.generateSent);
+    if (isError) onNotice(t.messageRejected, 'sticky'); else onNotice(t.generateSent, 'agent');
   });
   /** Post a suggested follow-up to the chat as the user, once the latest edits are saved for the agent to read. */
   function ask(prompt: PromptId) {
@@ -94,7 +95,7 @@ export function Editor({ drawing, doc, isLibrary, t, locale, theme, busy, action
       const source = drawing.current!;
       const text = t.prompts[prompt].text({ title: drawing.title.trim() || source.plugin.title, id: source.plugin.id, ids: selectedIds });
       const { isError } = await bridge.sendMessage({ role: 'user', content: [{ type: 'text', text }] });
-      onNotice(isError ? t.messageRejected : t.messageSent);
+      if (isError) onNotice(t.messageRejected, 'sticky'); else onNotice(t.messageSent, 'agent');
     });
   }
   const tone = status === 'paused' || status === 'disconnected' ? 'error' : status === 'saving' || status === 'unsaved' ? 'pending' : status === 'saved' ? 'ok' : 'idle';
@@ -164,7 +165,7 @@ export function Editor({ drawing, doc, isLibrary, t, locale, theme, busy, action
         // The sandbox blocks new windows; external links go through the host. Element links (#…) stay inside Excalidraw.
         if (!/^https?:\/\//i.test(element.link ?? '')) return;
         event.preventDefault();
-        void openExternal(element.link!).then(opened => { if (!opened) onNotice(t.linkUnavailable(element.link!)); });
+        void openExternal(element.link!).then(opened => { if (!opened) onNotice(t.linkUnavailable(element.link!), 'sticky'); });
       }}
       UIOptions={{ canvasActions: { loadScene: false, saveToActiveFile: false, export: false, saveAsImage: false, toggleTheme: false }, tools: { image: true } }}
       onChange={(elements, appState, files) => {
