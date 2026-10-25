@@ -100,14 +100,13 @@ export function Editor({ drawing, doc, isLibrary, t, locale, theme, busy, action
     const { isError } = await bridge.sendMessage({ role: 'user', content: [{ type: 'text', text: t.generatePrompt(description) }] });
     if (isError) onNotice(t.messageRejected, 'sticky'); else onNotice(t.generateSent, 'agent');
   });
-  /** Post a follow-up about this drawing to the chat as the user, once the latest edits are saved for the agent to read. */
-  function ask(prompt: PromptId | { change: string }) {
+  /** Post a suggested follow-up to the chat as the user, once the latest edits are saved for the agent to read. */
+  function ask(prompt: PromptId) {
     setIdeasOpen(false);
     action(async () => {
       await drawing.save();
       const source = drawing.current!;
-      const target = { title: drawing.title.trim() || source.plugin.title, id: source.plugin.id, ids: selectedIds };
-      const text = typeof prompt === 'string' ? t.prompts[prompt].text(target) : t.changePrompt(target, prompt.change);
+      const text = t.prompts[prompt].text({ title: drawing.title.trim() || source.plugin.title, id: source.plugin.id, ids: selectedIds });
       const { isError } = await bridge.sendMessage({ role: 'user', content: [{ type: 'text', text }] });
       if (isError) onNotice(t.messageRejected, 'sticky'); else onNotice(t.messageSent, 'agent');
     });
@@ -167,7 +166,7 @@ export function Editor({ drawing, doc, isLibrary, t, locale, theme, busy, action
     {!stuck && messages}
     <section id="main-content" className={`editor ${viewport.fitting ? 'is-fitting' : ''}`} aria-label={t.editorLabel}>
     {ideasOpen && <Ideas t={t} locale={locale} empty={empty} selected={selectedIds.length} canAsk={canAsk} busy={busy}
-      templates={templates} onInsert={insertTemplate} onInsertCustom={insertCustom} onAsk={ask} onGenerate={generate} onDescribe={change => ask({ change })} onClose={closeIdeas} />}
+      templates={templates} onInsert={insertTemplate} onInsertCustom={insertCustom} onAsk={ask} onGenerate={generate} onClose={closeIdeas} />}
     <Excalidraw key={viewport.editorKey}
       excalidrawAPI={value => { api.current = value; setExcalidrawAPI(value); viewport.mounted(value); }}
       // New shapes and text default to the hand-drawn style: sketchy lines and Virgil

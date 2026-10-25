@@ -18,17 +18,13 @@ type Props = {
   onAsk(prompt: PromptId): void;
   /** Ask the AI to draw a new template from a description. */
   onGenerate(description: string): void;
-  /** Ask the AI to change this drawing as described. */
-  onDescribe(text: string): void;
   onClose(): void;
 };
 
 /** Suggested next steps for this canvas: AI follow-ups that fit what is selected, and templates to insert. */
-export function Ideas({ t, locale, empty, selected, canAsk, busy, templates, onInsert, onInsertCustom, onAsk, onGenerate, onDescribe, onClose }: Props) {
+export function Ideas({ t, locale, empty, selected, canAsk, busy, templates, onInsert, onInsertCustom, onAsk, onGenerate, onClose }: Props) {
   const [description, setDescription] = useState('');
-  // A blank canvas is a good moment to make a new template; a drawn one is about changing what is there.
-  const generate = () => { if (description.trim()) (empty ? onGenerate : onDescribe)(description.trim()); };
-  const inputLabel = empty ? t.generateTemplate : t.describeChange;
+  const generate = () => { if (description.trim()) onGenerate(description.trim()); };
   const panel = useRef<HTMLDivElement>(null);
   useEffect(() => {
     // Close on Escape or a press anywhere else, including the canvas; the toggle button handles itself.
@@ -57,10 +53,11 @@ export function Ideas({ t, locale, empty, selected, canAsk, busy, templates, onI
         {templates.map(template => <button key={template.id} type="button" className="tool" disabled={busy} title={template.description || template.name} onClick={() => onInsertCustom(template)}><IconTemplate />{template.name}</button>)}
       </div>
     </>}
-    {canAsk && <>
-      <h2>{inputLabel}</h2>
+    {/* Making a new template fits a blank canvas; on a drawn one the user is here to change what is there. */}
+    {canAsk && empty && <>
+      <h2>{t.generateTemplate}</h2>
       <div className="ideas-generate">
-        <input aria-label={inputLabel} placeholder={empty ? t.generatePlaceholder : t.describeChangePlaceholder} value={description} maxLength={500}
+        <input aria-label={t.generateTemplate} placeholder={t.generatePlaceholder} value={description} maxLength={500}
           onChange={e => setDescription(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) generate(); }} />
         <button type="button" className="primary" disabled={busy || !description.trim()} onClick={generate}>{t.generateSend}</button>
       </div>
