@@ -53,7 +53,8 @@ export function Ideas({ t, locale, empty, selected, canAsk, busy, templates, onI
         {templates.map(template => <button key={template.id} type="button" className="tool" disabled={busy} title={template.description || template.name} onClick={() => onInsertCustom(template)}><IconTemplate />{template.name}</button>)}
       </div>
     </>}
-    {canAsk && <>
+    {/* Making a new template fits a blank canvas; on a drawn one the user is here to change what is there. */}
+    {canAsk && empty && <>
       <h2>{t.generateTemplate}</h2>
       <div className="ideas-generate">
         <input aria-label={t.generateTemplate} placeholder={t.generatePlaceholder} value={description} maxLength={500}

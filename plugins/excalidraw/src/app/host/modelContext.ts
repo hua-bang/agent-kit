@@ -48,7 +48,7 @@ function describeView({ t, isLibrary, doc, library, query, session }: View) {
     const view = 'editor';
     const text = `The user has the Agentic Excalidraw drawing "${doc.plugin.title}" open in the editor `
       + `(id ${doc.plugin.id}, revision ${doc.plugin.revision}, ${doc.elements.filter(e => !e.isDeleted).length} elements). `
-      + 'Call read_drawing with this id for its latest content before describing or changing it; use patch_drawing with the latest revision to edit.'
+      + 'Call read_drawing with this id for its latest content before describing or changing it; use edit_drawing (or patch_drawing for raw fields) with the latest revision to edit.'
       + ' The editor autosaves about every 1.2 seconds.'
       + (isLibrary && session.length > 1 ? ` Drawings opened in this panel, newest first: ${session.join(', ')}.` : '');
     return { key: `${view}:${doc.plugin.id}`, params: {

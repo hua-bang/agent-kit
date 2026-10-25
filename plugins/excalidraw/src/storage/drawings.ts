@@ -3,6 +3,7 @@ import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import lockfile from 'proper-lockfile';
+import { editScene, reconcileElements, type Operation } from '../shared/graph.js';
 import { customTemplateSchema, documentSchema, emptyScene, idSchema, libraryItemsSchema, sceneSchema, titleSchema, type CustomTemplate, type Drawing, type Scene, type TemplateSummary } from '../shared/schemas.js';
 
 const MAX_BYTES = 4 * 1024 * 1024;
@@ -187,11 +188,21 @@ export class DrawingStore {
       return current.plugin;
     });
   }
-  /** Element-level edit: untouched elements, files and app state are kept. Fails fast on a stale revision. */
+  /**
+   * Element-level edit: untouched elements, files and app state are kept. Fails fast on a stale revision.
+   * Bound arrows follow shapes that moved, and labels and bindings of removed elements are cleaned up.
+   */
   async patch(id: string, expectedRevision: number, upsert: Element[], removeIds: string[]): Promise<Drawing> {
+    return this.rewrite(id, expectedRevision, elements => reconcileElements(elements, patchElements(elements, upsert, removeIds)));
+  }
+  /** Node-level edit (add, connect, label, move, remove…) that keeps connectors attached. */
+  async edit(id: string, expectedRevision: number, operations: Operation[]): Promise<Drawing> {
+    return this.rewrite(id, expectedRevision, elements => editScene(elements, operations));
+  }
+  private async rewrite(id: string, expectedRevision: number, change: (elements: Element[]) => Element[]): Promise<Drawing> {
     const doc = await this.read(id);
     if (doc.plugin.revision !== expectedRevision) throw new ConflictError(doc.plugin.revision);
     // save() re-checks the revision under the lock, so a write between read and save still conflicts.
-    return this.save(id, expectedRevision, { elements: patchElements(doc.elements, upsert, removeIds), appState: doc.appState, files: doc.files });
+    return this.save(id, expectedRevision, { elements: change(doc.elements), appState: doc.appState, files: doc.files });
   }
 }
